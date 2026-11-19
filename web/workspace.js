@@ -452,6 +452,27 @@ const load = {
     byId("access-queue").replaceChildren(...(requests.length ? requests.map(renderAccessRequest)
       : [node("p", "No access requests yet.")]));
   },
+  async notifications() {
+    const rows = await request("/notifications");
+    table("notification-list", ["Event", "Priority", "Channel", "Status", "Attempts", "Last error"], rows.map((item) => [
+      item.action, item.priority, item.channel, item.state, item.attempts, item.last_error,
+    ]), "No notifications yet.");
+    const canConfigure = session.role === "editor" && Boolean(session.member_id);
+    byId("notification-preferences").hidden = !canConfigure;
+    if (!canConfigure) return;
+    const settings = await request("/notifications/settings");
+    const form = byId("notification-settings-form");
+    byId("notification-destinations").textContent = settings.available_channels.length
+      ? "Available channels: " + settings.available_channels.join(", ")
+      : "Outbound delivery requires an operator-configured destination.";
+    for (const option of form.querySelectorAll('input[name="channels"]')) {
+      option.disabled = !settings.available_channels.includes(option.value);
+      option.checked = settings.preferences.channels.includes(option.value) && !option.disabled;
+    }
+    form.elements.namedItem("minimum_priority").value = settings.preferences.minimum_priority;
+    byId("notification-events").replaceChildren(...Object.entries(settings.event_priorities).map(([event, priority]) =>
+      new Option(`${event} · ${priority}`, event, false, settings.preferences.events.includes(event))));
+  },
   async security() {
     const [findings, restrictions] = await Promise.all([request("/security-findings"), request("/containment")]);
     byId("containment-publisher").hidden = !session.member_id || session.role !== "publisher";
@@ -857,4 +878,13 @@ onSubmit("containment-transition", async ({id, action}) => {
   const result = await request("/containment/" + encodeURIComponent(id) + "/transition", "POST", {action});
   await load.security();
   showNotice("Containment status: " + result.status.replaceAll("_", " "));
+});
+
+onSubmit("notification-settings-form", async ({ minimum_priority }, form) => {
+  const data = new FormData(form);
+  await request("/notifications/settings", "PUT", {
+    channels: data.getAll("channels"), events: data.getAll("events"), minimum_priority,
+  });
+  await load.notifications();
+  showNotice("Notification preferences saved.");
 });

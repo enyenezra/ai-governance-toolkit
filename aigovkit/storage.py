@@ -9,6 +9,8 @@ from pydantic import TypeAdapter
 
 from aigovkit.directory import DIRECTORY_SCHEMA
 from aigovkit.models import Record, RiskReport
+from aigovkit.notification_outbox import SCHEMA as NOTIFICATION_SCHEMA
+from aigovkit.notification_outbox import enqueue
 from aigovkit.tenancy import Session
 
 SCHEMA = """
@@ -114,6 +116,7 @@ class PostgresInventory:
                 )
             conn.execute(DIRECTORY_SCHEMA)
             conn.execute(SCHEMA)
+            conn.execute(NOTIFICATION_SCHEMA)
 
     def put(self, records: Iterable[Record]) -> None:
         entries = list(records)
@@ -215,10 +218,10 @@ class PostgresInventory:
         if self.actor is None:
             return
         credential = self.actor.credential if self.actor.member else "shared_key"
-        executor.execute(
+        row = executor.execute(
             """
             INSERT INTO governance_audit (actor_id, credential, action, resource_type, resource_id, version)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING event_id
             """,
             (
                 self.actor.member,
@@ -228,6 +231,16 @@ class PostgresInventory:
                 resource_id,
                 version,
             ),
+        ).fetchone()
+        event_id = row["event_id"] if isinstance(row, dict) else row[0]
+        enqueue(
+            executor,
+            event_id,
+            action,
+            resource_type,
+            resource_id,
+            version,
+            self.actor.tenant,
         )
 
     def audit_events(self, before: int | None, limit: int) -> list[dict]:

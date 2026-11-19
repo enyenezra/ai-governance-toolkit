@@ -54,3 +54,8 @@ For [model gateway enforcement](docs/provider-enforcement.md), expose only the
 wrapped routes and bind each to its fixed upstream. API decisions cannot
 protect direct access to the upstream. Keep provider credentials in the
 protected application and scope its AIGovKit key to the gateway role.
+
+Deploy [outbound notification destinations](docs/queued-notifications.md) via
+trusted operator configuration. Use scoped credentials, restrict egress to
+approved receivers, and validate webhook signatures and timestamps at the
+receiver. Use test destinations before enabling production delivery.

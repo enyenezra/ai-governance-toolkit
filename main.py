@@ -14,6 +14,7 @@ from aigovkit.device_discovery import router as device_router
 from aigovkit.enterprise import router as enterprise_router
 from aigovkit.foundation import router as foundation_router
 from aigovkit.guardrails import router as gate_router
+from aigovkit.notifications import router as notifications_router
 from aigovkit.operations_automation import router as automation_router
 from aigovkit.policy_outputs import router as output_router
 from aigovkit.policy_publication import router as publication_router
@@ -35,6 +36,7 @@ app.include_router(gate_router)
 app.include_router(containment_router)
 app.include_router(provider_router)
 app.include_router(automation_router)
+app.include_router(notifications_router)
 app.include_router(output_router)
 app.include_router(readiness_router)
 app.include_router(foundation_router)
