@@ -24,6 +24,7 @@ from aigovkit.models import (
 )
 from aigovkit.policy import POLICY_VERSIONS, evaluate
 from aigovkit.storage import PostgresInventory
+from aigovkit.use_cases import router as use_case_router
 
 api_key = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -179,3 +180,7 @@ def reports(
         return store.list_reports(offset, limit)
     except psycopg.Error:
         raise HTTPException(503, "Governance database unavailable.") from None
+
+
+# Additive preliminary intake; inherits the same API-key dependency.
+router.include_router(use_case_router)
