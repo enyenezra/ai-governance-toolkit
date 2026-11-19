@@ -117,7 +117,10 @@ def authorize_member(request: Request, session: Session) -> Session:
             )
         return session
     if session.role == "gateway":
-        if request.method != "POST" or request.url.path != "/v1/guardrail-checks":
+        if request.method != "POST" or (
+            request.url.path != "/v1/guardrail-checks"
+            and not request.url.path.startswith("/v1/provider-decisions/")
+        ):
             raise HTTPException(
                 403, "Gateway credentials are restricted to runtime checks."
             )
@@ -147,6 +150,13 @@ def authorize_member(request: Request, session: Session) -> Session:
         and request.url.path.startswith("/v1/training/assignments/")
         and request.url.path.endswith("/complete")
     )
+    provider_publish = (
+        request.method == "POST"
+        and session.role == "publisher"
+        and request.url.path.startswith(
+            ("/v1/provider-deployments/", "/v1/provider-verifications/")
+        )
+    )
     allowed_directory = (
         request.method == "PUT"
         and session.role == "identity_admin"
@@ -156,6 +166,7 @@ def authorize_member(request: Request, session: Session) -> Session:
         request.method not in {"GET", "HEAD"}
         and session.role != "editor"
         and not allowed_post
+        and not provider_publish
         and not allowed_directory
         and not allowed_training
     ):

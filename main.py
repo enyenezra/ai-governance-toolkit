@@ -17,6 +17,7 @@ from aigovkit.operations_automation import router as automation_router
 from aigovkit.policy_outputs import router as output_router
 from aigovkit.policy_publication import router as publication_router
 from aigovkit.policy_review import router as review_router
+from aigovkit.provider_enforcement import router as provider_router
 from aigovkit.readiness_extensions import router as readiness_router
 from aigovkit.sso import router as sso_router
 from aigovkit.workspace_discovery import router as workspace_discovery_router
@@ -30,6 +31,7 @@ app.include_router(device_router)
 app.include_router(workspace_discovery_router)
 app.include_router(sso_router)
 app.include_router(gate_router)
+app.include_router(provider_router)
 app.include_router(automation_router)
 app.include_router(output_router)
 app.include_router(readiness_router)

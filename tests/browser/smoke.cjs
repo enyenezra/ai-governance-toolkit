@@ -38,6 +38,16 @@ async function main() {
     await page.getByRole("button", { name: "Save organisation" }).click();
     await page.getByText("Organisation saved.").waitFor();
 
+    await page.getByRole("link", { name: "Provider enforcement" }).click();
+    await page.getByRole("heading", { name: "Register a provider" }).waitFor();
+    await page.getByLabel("Provider ID", {exact: true}).first().fill("browser-provider");
+    await page.getByLabel("Name", {exact: true}).fill("Browser fixture provider");
+    await page.getByLabel("HTTPS endpoint").fill("https://provider.example.invalid");
+    await page.getByRole("button", { name: "Register provider" }).click();
+    await page.getByText("Provider registered.").waitFor();
+    await page.getByRole("cell", { name: "Browser fixture provider" }).waitFor();
+    await assertAccessible(page);
+
     await page.getByRole("link", { name: "Connected discovery" }).click();
     await page.getByRole("heading", { name: "Google Workspace" }).waitFor();
     await assertAccessible(page);

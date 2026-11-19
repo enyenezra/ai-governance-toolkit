@@ -49,3 +49,8 @@ on a trusted HTTPS boundary. Scope gateway and observer credentials to their
 single purpose, keep those credentials out of browsers, and fail closed when
 the gate is unavailable. External services must route protected operations
 through the gate for its decisions to take effect.
+
+For [model gateway enforcement](docs/provider-enforcement.md), expose only the
+wrapped routes and bind each to its fixed upstream. API decisions cannot
+protect direct access to the upstream. Keep provider credentials in the
+protected application and scope its AIGovKit key to the gateway role.

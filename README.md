@@ -271,3 +271,9 @@ stop it and retain the demo volume. The generated `.env.aigovkit-demo` contains
 local credentials and is ignored by Git.
 
 See the [pilot checklist](docs/pilot-checklist.md) and [backup and restore guide](docs/backup-restore.md).
+
+## Phase 2 provider enforcement
+
+See the [repository audit and backlog](docs/phase2.md) and the
+[provider enforcement guide](docs/provider-enforcement.md) for registered
+providers, approved model allowlists and gateway decision evidence.
