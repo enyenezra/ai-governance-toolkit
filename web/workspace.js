@@ -452,6 +452,16 @@ const load = {
     byId("access-queue").replaceChildren(...(requests.length ? requests.map(renderAccessRequest)
       : [node("p", "No access requests yet.")]));
   },
+  async security() {
+    const [findings, restrictions] = await Promise.all([request("/security-findings"), request("/containment")]);
+    byId("containment-publisher").hidden = !session.member_id || session.role !== "publisher";
+    table("security-findings", ["Finding ID", "Rule", "Agent", "Severity", "Evidence IDs"], findings.map((item) => [
+      item.id, item.rule.replaceAll("_", " "), item.agent_id, item.severity, item.evidence_ids.join(", "),
+    ]));
+    table("containment-list", ["Request ID", "Agent", "Status", "Expires"], restrictions.map((item) => [
+      item.id, item.agent_id, item.status, item.expires_at || item.approval_expires_at,
+    ]));
+  },
   async providers() {
     const rows = await request("/providers");
     byId("provider-publish").hidden = !session.member_id || session.role !== "publisher";
@@ -825,4 +835,26 @@ onSubmit("provider-verify", async ({ id, ...evidence }) => {
   await request("/provider-verifications/" + encodeURIComponent(id), "POST", evidence);
   await load.providers();
   showNotice("Gateway verification recorded.");
+});
+
+byId("detect-now").addEventListener("click", () => runPolicyAction(async () => {
+  const result = await request("/security-detections/run", "POST");
+  await load.security();
+  showNotice(`${result.findings_created} new findings · ${result.incidents_created} new incidents.`);
+}));
+byId("containment-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const mode = event.submitter?.value;
+  if (!mode) return;
+  const {finding_id, minutes} = Object.fromEntries(new FormData(event.currentTarget));
+  runPolicyAction(async () => {
+    const result = await request("/containment", "POST", {finding_id, minutes: Number(minutes), dry_run: mode === "preview"});
+    await load.security();
+    showNotice(result.status === "preview" ? `Preview: suspend ${result.agent_id} at the gate for ${result.minutes} minutes.` : "Containment approval requested.");
+  });
+});
+onSubmit("containment-transition", async ({id, action}) => {
+  const result = await request("/containment/" + encodeURIComponent(id) + "/transition", "POST", {action});
+  await load.security();
+  showNotice("Containment status: " + result.status.replaceAll("_", " "));
 });

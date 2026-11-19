@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS foundation_documents (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (kind, id)
 );
+CREATE INDEX IF NOT EXISTS foundation_documents_kind_time
+    ON foundation_documents (kind, created_at);
 CREATE TABLE IF NOT EXISTS policy_revisions (
     draft_id text NOT NULL,
     version integer NOT NULL CHECK (version > 0),

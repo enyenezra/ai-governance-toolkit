@@ -277,3 +277,6 @@ See the [pilot checklist](docs/pilot-checklist.md) and [backup and restore guide
 See the [repository audit and backlog](docs/phase2.md) and the
 [provider enforcement guide](docs/provider-enforcement.md) for registered
 providers, approved model allowlists and gateway decision evidence.
+
+See [controlled containment](docs/controlled-containment.md) for evidence-backed
+detections, incident intake, independent approval and temporary gate restrictions.
