@@ -43,3 +43,9 @@ issuer and API audience. Provision its public signing keys through the
 deployment and avoid logging bearer credentials. Remove subject bindings
 when users leave. The audit feed is application-level evidence and relies
 on PostgreSQL access controls and backups.
+
+Run the [runtime gate](docs/governance-expansion.md#agent-guardrails-and-monitoring)
+on a trusted HTTPS boundary. Scope gateway and observer credentials to their
+single purpose, keep those credentials out of browsers, and fail closed when
+the gate is unavailable. External services must route protected operations
+through the gate for its decisions to take effect.

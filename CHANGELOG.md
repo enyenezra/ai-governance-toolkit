@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased governance expansion
+
+- Add browser SSO, managed membership, access requests and recertification.
+- Add published policy exports, redlines, review schedules and acknowledgement coverage.
+- Add runtime gate deployment, rollback, suspension and decision verification.
+- Add provider metadata discovery, adaptive readiness and operational registers.
+
 ## Unreleased identity and audit
 
 - Validate RFC 9068 access tokens against a trusted local public JWKS.

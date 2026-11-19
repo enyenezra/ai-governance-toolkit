@@ -18,7 +18,7 @@ def invalid_token() -> HTTPException:
     return HTTPException(401, "Invalid access token.", headers=CHALLENGE)
 
 
-def verify_access_token(token: str) -> str:
+def verify_access_token(token: str, client_id: str | None = None) -> str:
     issuer = os.environ.get("AIGOVKIT_OIDC_ISSUER", "")
     audience = os.environ.get("AIGOVKIT_OIDC_AUDIENCE")
     filename = os.environ.get("AIGOVKIT_OIDC_JWKS_FILE")
@@ -110,6 +110,7 @@ def verify_access_token(token: str) -> str:
         or len(sub) > 255
         or not isinstance(claims["client_id"], str)
         or not claims["client_id"]
+        or (client_id is not None and claims["client_id"] != client_id)
     ):
         raise invalid_token()
     return sub

@@ -54,8 +54,9 @@ Use your issuer-approved client to obtain an access token for the API.
 Choose **OIDC access token** on the workspace sign-in form, or send it through
 `Authorization: Bearer` in API calls. The browser keeps it in memory. API keys
 remain available through `X-API-Key`. Send one credential per request.
-Browser redirect sign-in and token refresh, discovery and automatic JWKS
-rotation, multiple issuers, and identity provisioning remain future work.
+See [the expansion guide](governance-expansion.md#identity-and-access) for browser
+redirect sign-in and managed provisioning. Token refresh, issuer discovery,
+automatic JWKS rotation and multiple issuers remain separate work.
 Provider-specific tokens that lack the required access-token profile need a
 separately reviewed integration.
 

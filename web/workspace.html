@@ -20,6 +20,10 @@
       <a href="#library">Policy library</a>
       <a href="#published">Published policies</a>
       <a href="#controls">Control catalogue</a>
+      <a href="#operations">Governance registers</a>
+      <a href="#access">Access requests</a>
+      <a href="#guardrails">Runtime guardrails</a>
+      <a href="#directory" id="directory-link" hidden>Identity directory</a>
       <a href="#audit" id="audit-link" hidden>Audit events</a>
     </nav>
     <div class="sidebar-footer"><a href="/docs">API documentation ↗</a></div>
@@ -37,6 +41,7 @@
           <label><span id="credential-label">Organisation API key</span><input name="key" type="password" maxlength="256" required autocomplete="off"></label>
           <button type="submit">Open workspace</button>
         </form>
+        <p><a href="/v1/sso/start" id="sso-link" hidden>Sign in with your identity provider</a></p>
       </section>
       <p id="notice" role="status" aria-live="polite"></p>
       <div id="workspace" hidden>
@@ -82,7 +87,8 @@
         <section id="readiness" class="page" hidden>
           <h1>AI readiness assessment</h1>
           <div class="split">
-            <section class="card" data-write><form id="readiness-form"><div id="questions"></div><button>Save assessment</button></form></section>
+            <section class="card" data-write><form id="readiness-form"><label class="check"><input id="sensitive-readiness" type="checkbox"> Handles sensitive data</label>
+              <div id="questions"></div><button>Save assessment</button></form></section>
             <section class="card"><h2>Latest readiness result</h2><div id="readiness-result"></div></section>
           </div>
         </section>
@@ -123,8 +129,95 @@
         <section id="published" class="page" hidden>
           <h1>Published policies</h1>
           <div class="split">
-            <section class="card"><h2>Current policies</h2><div id="published-list"></div></section>
+            <section class="card"><h2>Current policies</h2><div id="published-list"></div><h2>Review schedule</h2><div id="review-schedule"></div></section>
             <section class="card"><h2>Policy details</h2><div id="published-detail">Select a published policy to read its clauses.</div></section>
+          </div>
+        </section>
+        <section id="operations" class="page" hidden>
+          <h1>Governance registers</h1>
+          <div id="monitoring-summary" class="metrics"></div>
+          <div class="split">
+            <section class="card">
+              <label>Register <select id="register-kind">
+                <option value="risk">Risk</option><option value="incident">Incidents</option>
+                <option value="vendor">Vendors</option><option value="training">Training</option>
+                <option value="discovery">Discovered services</option><option value="signal">Monitoring signals</option>
+                <option value="credential">Credential rotation</option><option value="framework_assessment">Framework assessments</option><option value="control_check">Control tests</option>
+              </select></label>
+              <div id="register-list"></div>
+            </section>
+            <section class="card" data-write>
+              <h2>Save a register record</h2>
+              <form id="register-form">
+                <label>Record ID <input name="id" pattern="[a-z0-9][a-z0-9_\-]{0,63}" required></label>
+                <label>Expected version (0 for a new record) <input name="version" type="number" min="0" required value="0"></label>
+                <label>Record JSON <textarea name="body" required spellcheck="false"></textarea></label>
+                <p>See <a href="/docs">API documentation</a> for the selected register’s fields.</p>
+                <button>Save record</button>
+              </form>
+            </section>
+          </div>
+        </section>
+        <section id="access" class="page" hidden>
+          <h1>Access requests</h1>
+          <div class="split">
+            <section class="card"><h2>Requests and decisions</h2><div id="access-queue"></div></section>
+            <section class="card" id="request-panel">
+              <h2>Request access review</h2>
+              <form id="request-form">
+                <label>Identity group <input name="group" required></label>
+                <div class="row"><label>Department <input name="department_id" required></label><label>Purpose <input name="purpose" required></label></div>
+                <div class="row"><label>Agent <input name="agent_id" required></label><label>Asset <input name="asset_id" required></label></div>
+                <label>Action <select name="action"><option>read</option><option>write</option><option>delete</option><option>admin</option></select></label>
+                <label>Business justification <textarea name="justification" maxlength="500" required></textarea></label>
+                <button>Submit recommendation request</button>
+              </form>
+            </section>
+          </div>
+        </section>
+        <section id="guardrails" class="page" hidden>
+          <h1>Runtime guardrails</h1>
+          <p class="subtitle">Deployments apply at the AIGovKit gate. Callers must stop on denial or failure.</p>
+          <div class="split">
+            <section class="card"><h2>Current gate states</h2><div id="gate-states"></div>
+              <h2>Recent verifications</h2><div id="gate-verifications"></div>
+            </section>
+            <section class="card">
+              <div id="gate-authoring" hidden><h2>Propose an exact rule</h2>
+                <form id="rule-form">
+                  <label>Policy 1.1.0 scope JSON <textarea name="scope" required></textarea></label>
+                  <label>Decision <select name="decision"><option>deny</option><option>allow</option></select></label>
+                  <button>Propose rule</button>
+                </form>
+              </div>
+              <div id="gate-publishing" hidden><h2>Change a gate deployment</h2>
+                <form id="gate-form">
+                  <label>Agent ID <input name="agent_id" required></label>
+                  <label>Operation <select name="operation"><option>deploy</option><option>rollback</option><option>suspend</option><option>resume</option></select></label>
+                  <label>Rule <select name="revision_id" id="gate-rule"></select></label>
+                  <label>Expected version <input name="version" type="number" min="0" required value="0"></label>
+                  <button>Apply at gate</button>
+                </form>
+              </div>
+              <h2>Proposed rules</h2><div id="gate-rules"></div>
+            </section>
+          </div>
+        </section>
+        <section id="directory" class="page" hidden>
+          <h1>Managed identity directory</h1>
+          <div class="split">
+            <section class="card"><h2>Members</h2><div id="managed-members"></div></section>
+            <section class="card"><h2>Provision or update a member</h2>
+              <form id="member-form">
+                <label>Stable member ID <input name="id" required></label>
+                <label>Verified issuer subject <input name="subject" maxlength="255" required></label>
+                <label>Role <select name="role"><option>reader</option><option>editor</option><option>reviewer</option><option>publisher</option><option>auditor</option></select></label>
+                <label>State <select name="state"><option>active</option><option>suspended</option></select></label>
+                <label>Managed group IDs (comma separated) <input name="groups"></label>
+                <label>Expected version <input name="version" type="number" min="0" required value="0"></label>
+                <button>Save member</button>
+              </form>
+            </section>
           </div>
         </section>
         <section id="audit" class="page" hidden>

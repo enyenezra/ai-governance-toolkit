@@ -190,3 +190,56 @@ def test_oidc_policy_audit_uses_local_actor_and_tenant(oidc, monkeypatch):
     assert auditor.get(f"/v1/audit-events?before={cursor}&limit=1").json() == [
         events[1]
     ]
+
+
+def test_sso_pkce_state_and_cookie_origin(oidc, monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+
+    from cryptography.fernet import Fernet
+
+    from aigovkit import sso
+
+    token, _, _ = oidc
+    origin = "https://governance.example.invalid"
+    monkeypatch.setenv("AIGOVKIT_SSO_AUTHORIZATION_URL", ISSUER + "authorize")
+    monkeypatch.setenv("AIGOVKIT_SSO_TOKEN_URL", ISSUER + "token")
+    monkeypatch.setenv("AIGOVKIT_SSO_CALLBACK_URL", origin + "/v1/sso/callback")
+    monkeypatch.setenv("AIGOVKIT_SSO_CLIENT_ID", "fixture")
+    monkeypatch.setenv("AIGOVKIT_SSO_COOKIE_KEY", Fernet.generate_key().decode())
+
+    def exchange(url, data):
+        assert url == ISSUER + "token"
+        assert data["client_id"] == "fixture"
+        assert len(data["code_verifier"]) > 43
+        return token()
+
+    monkeypatch.setattr(sso, "exchange", exchange)
+    client = TestClient(app, base_url=origin)
+    start = client.get("/v1/sso/start", follow_redirects=False)
+    assert start.status_code == 303
+    query = parse_qs(urlsplit(start.headers["location"]).query)
+    assert query["code_challenge_method"] == ["S256"]
+    path = "/v1/sso/callback"
+    assert (
+        client.get(path, params={"code": "fixture", "state": "unrelated"}).status_code
+        == 400
+    )
+    callback = client.get(
+        path,
+        params={"code": "fixture", "state": query["state"][0]},
+        follow_redirects=False,
+    )
+    assert callback.status_code == 303
+    assert (
+        "HttpOnly" in callback.headers["set-cookie"]
+        and "Secure" in callback.headers["set-cookie"]
+    )
+    assert client.get("/v1/session").json()["member_id"] == "author"
+    assert (
+        client.post(
+            "/v1/sso/logout", headers={"Origin": "https://other.invalid"}
+        ).status_code
+        == 403
+    )
+    assert client.post("/v1/sso/logout", headers={"Origin": origin}).status_code == 204
+    assert client.get("/v1/session").status_code == 401

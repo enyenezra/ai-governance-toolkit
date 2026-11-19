@@ -18,12 +18,17 @@ function showNotice(message = "") {
   byId("notice").textContent = message;
 }
 
+function authHeaders() {
+  if (!secret) return {};
+  return credentialType === "oidc" ? { Authorization: "Bearer " + secret } : { "X-API-Key": secret };
+}
+
 async function request(path, method = "GET", data) {
   const response = await fetch("/v1" + path, {
     method,
     cache: "no-store",
     headers: {
-      ...(credentialType === "oidc" ? { Authorization: "Bearer " + secret } : { "X-API-Key": secret }),
+      ...authHeaders(),
       "Content-Type": "application/json",
     },
     body: data === undefined ? undefined : JSON.stringify(data),
@@ -139,6 +144,21 @@ async function openPolicy(draft, selectedVersion) {
     const label = node("label", "Version history");
     label.append(picker);
     target.append(label, node("p", `Review status: ${current.status.replaceAll("_", " ")} · Author: ${current.author}`));
+    const previous = versions.find((entry) => entry.version < selected);
+    if (previous) {
+      const compare = node("button", `Compare with revision ${previous.version}`, "secondary");
+      const result = node("div");
+      compare.addEventListener("click", () => runPolicyAction(async () => {
+        const redline = await request(`/policy-drafts/${draft.id}/compare?from_version=${previous.version}&to_version=${selected}`);
+        result.replaceChildren(...(redline.changes.length ? redline.changes.map((change) => {
+          const line = node("p");
+          line.append(node("strong", change.clause_id), document.createTextNode(" "),
+            node("del", change.before), document.createTextNode(" "), node("ins", change.after));
+          return line;
+        }) : [node("p", "No clause text changed.")]));
+      }));
+      target.append(compare, result);
+    }
     if (current.events.length) target.append(list(current.events.map((event) =>
       `${event.action.replaceAll("_", " ")} · ${event.actor}${event.note ? " · " + event.note : ""}`)));
   }
@@ -254,6 +274,28 @@ async function openPublishedPolicy(draftId, version) {
   renderDraft("published-detail", policy.body, true);
   const target = byId("published-detail");
   target.append(node("p", `Revision ${policy.version} · Published by ${policy.publisher}`));
+  const downloads = node("p");
+  for (const format of ["md", "docx", "pdf"]) {
+    const button = node("button", "Download " + (format === "md" ? "Markdown" : format.toUpperCase()), "secondary");
+    button.addEventListener("click", () => runPolicyAction(async () => {
+      const response = await fetch(`/v1/published-policies/${draftId}/${version}/export/${format}`, {
+        cache: "no-store", headers: authHeaders(),
+      });
+      if (!response.ok) throw new Error("The policy could not be exported.");
+      const address = URL.createObjectURL(await response.blob());
+      const link = node("a");
+      link.href = address;
+      link.download = `policy-${draftId}-${version}.${format}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(address), 1000);
+    }));
+    downloads.append(button, document.createTextNode(" "));
+  }
+  target.append(downloads);
+  if (session.member_id && ["auditor", "publisher"].includes(session.role)) {
+    const summary = await request(`/published-policies/${draftId}/${version}/acknowledgement-summary`);
+    target.append(node("p", `Acknowledgements: ${summary.acknowledged} of ${summary.active_members} active members`));
+  }
   if (policy.acknowledged_at) {
     target.append(node("p", "You acknowledged this version."));
   } else if (policy.current && session.member_id) {
@@ -283,11 +325,12 @@ function renderInventory() {
 
 const load = {
   async overview() {
-    const [profile, tools, agents, reports, readiness] = await Promise.all([
+    const [profile, tools, agents, reports, adaptive, legacy] = await Promise.all([
       request("/organisation"), request("/inventory?kind=tool&limit=100"),
       request("/inventory?kind=agent&limit=100"), request("/reports?limit=10"),
-      request("/readiness/assessments?limit=1"),
+      request("/readiness/adaptive/results?limit=1"), request("/readiness/assessments?limit=1"),
     ]);
+    const readiness = adaptive.length ? adaptive : legacy;
     byId("scope").textContent = profile?.name || session.organisation_id || "Complete organisation setup to name this workspace.";
     const metric = (label, value) => {
       const card = node("section", undefined, "card metric");
@@ -307,13 +350,15 @@ const load = {
     ]));
   },
   async organisation() {
-    const profile = await request("/organisation");
     const form = byId("organisation-form");
+    form.hidden = true;
+    const profile = await request("/organisation");
     form.reset();
     if (profile) {
       for (const [key, value] of Object.entries(profile)) form.elements.namedItem(key).value = value;
     }
-    byId("profile-read").textContent = session.role === "reader"
+    form.hidden = session.role !== "editor";
+    byId("profile-read").textContent = session.role !== "editor"
       ? profile ? `${profile.name} · ${profile.sector} · ${profile.jurisdiction} · ${profile.adoption_stage}`
         : "Organisation setup is incomplete."
       : "";
@@ -326,8 +371,9 @@ const load = {
     renderInventory();
   },
   async readiness() {
+    const params = "?handles_sensitive_data=" + byId("sensitive-readiness").checked;
     const [questionnaire, results] = await Promise.all([
-      request("/readiness/questions"), request("/readiness/assessments?limit=1"),
+      request("/readiness/adaptive" + params), request("/readiness/adaptive/results?limit=1"),
     ]);
     const questions = Object.entries(questionnaire.questions).map(([key, prompt]) => {
       const label = node("label", prompt);
@@ -363,7 +409,12 @@ const load = {
     byId("drafts").replaceChildren(...(buttons.length ? buttons : [node("p", "No saved drafts yet.")]));
   },
   async published() {
-    const policies = await request("/published-policies");
+    const [policies, schedule] = await Promise.all([
+      request("/published-policies"), request("/policy-review-schedule"),
+    ]);
+    table("review-schedule", ["Policy", "Due date", "Status"], schedule.map((policy) => [
+      policy.title, policy.due_date, policy.due ? "Due" : "Scheduled",
+    ]), "No reviews scheduled.");
     const entries = policies.map((policy) => {
       const entry = node("p");
       const button = node("button", policy.title, "secondary");
@@ -374,6 +425,56 @@ const load = {
     });
     byId("published-list").replaceChildren(...(entries.length ? entries : [node("p", "No published policies yet.")]));
   },
+  async operations() {
+    const metrics = await request("/monitoring");
+    const labels = { open_incidents: "Open incidents", high_residual_risks: "High residual risks",
+      rotations_due: "Rotations due", failed_control_checks: "Failed control tests" };
+    byId("monitoring-summary").replaceChildren(...Object.entries(labels).map(([key, label]) => {
+      const card = node("section", undefined, "card metric");
+      card.append(node("strong", metrics[key]), node("span", label));
+      return card;
+    }));
+    const kind = byId("register-kind").value;
+    const items = await request("/registers/" + encodeURIComponent(kind));
+    table("register-list", ["ID", "Title", "Status", "Version"], items.map((item) => [
+      item.id, item.title, item.status ?? item.result ?? "Recorded", item.version,
+    ]));
+  },
+  async access() {
+    byId("request-panel").hidden = !session.member_id;
+    if (!session.member_id) {
+      byId("access-queue").replaceChildren(node("p", "Sign in as a named member to use access requests."));
+      return;
+    }
+    const requests = await request("/access-requests");
+    byId("access-queue").replaceChildren(...(requests.length ? requests.map(renderAccessRequest)
+      : [node("p", "No access requests yet.")]));
+  },
+  async guardrails() {
+    const [states, rules, checks] = await Promise.all([
+      request("/guardrails"), request("/guardrail-rules"), request("/guardrail-verifications"),
+    ]);
+    byId("gate-authoring").hidden = session.role !== "editor" || !session.member_id;
+    byId("gate-publishing").hidden = session.role !== "publisher" || !session.member_id;
+    byId("gate-rule").replaceChildren(new Option("No rule (suspend or resume)", ""),
+      ...rules.map((rule) => new Option(`${rule.scope.agent_id} · ${rule.decision} · ${rule.id}`, rule.id)));
+    table("gate-states", ["Agent", "State", "Rule", "Version"], states.map((state) => [
+      state.agent_id, state.suspended ? "Suspended" : state.revision_id ? "Rule active" : "Default deny",
+      state.revision_id, state.version,
+    ]));
+    table("gate-rules", ["Agent", "Decision", "Rule ID"], rules.map((rule) => [
+      rule.scope.agent_id, rule.decision, rule.id,
+    ]));
+    table("gate-verifications", ["Agent", "Version", "Result"], checks.map((check) => [
+      check.agent_id, check.deployment_version, check.matched ? "Matched" : "Mismatch",
+    ]));
+  },
+  async directory() {
+    const members = await request("/identity/members");
+    table("managed-members", ["Member", "Role", "Status", "Groups", "Version"], members.map((member) => [
+      member.member_id, member.role, member.state, member.groups.join(", "), member.version,
+    ]));
+  },
   audit: () => loadAudit(),
   async controls() {
     const controls = await request("/controls");
@@ -382,6 +483,49 @@ const load = {
     ]));
   },
 };
+
+function renderAccessRequest(item) {
+  const entry = node("section", undefined, "card");
+  entry.append(node("h3", `${item.request.simulation.agent_id} · ${item.request.simulation.action}`),
+    node("p", `${item.requester} · ${item.status}`), node("p", item.request.justification),
+    list(item.assessment.reasons));
+  const canReview = session.role === "reviewer" && item.requester !== session.member_id && item.status === "pending";
+  const canRenew = item.requester === session.member_id && item.status === "approved";
+  if (!canReview && !canRenew) return entry;
+  const form = node("form");
+  const label = node("label", canReview ? "Decision rationale" : "Recertification justification");
+  const note = node("textarea");
+  note.required = true;
+  note.maxLength = 500;
+  label.append(note);
+  form.append(label);
+  for (const [action, title] of (canReview ? [["approved", "Approve recommendation"], ["denied", "Deny"]]
+    : [["renew", "Request recertification"]])) {
+    if (action === "approved" && item.assessment.disposition === "deny") continue;
+    const button = node("button", title);
+    button.value = action;
+    form.append(button);
+  }
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    if (!button) return;
+    button.disabled = true;
+    runPolicyAction(async () => {
+      try {
+        if (canReview) await request("/access-decisions", "POST", {
+          request_id: item.id, decision: button.value, rationale: note.value,
+        });
+        else await request("/access-recertifications", "POST", { request_id: item.id, justification: note.value });
+        await load.access();
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+  entry.append(form);
+  return entry;
+}
 
 async function loadAudit(before) {
   const events = await request("/audit-events?limit=20" + (before ? "&before=" + before : ""));
@@ -427,14 +571,30 @@ onSubmit("login-form", async ({ key, credential }, form) => {
     secret = "";
     throw error;
   }
+  await enterWorkspace();
+});
+
+async function enterWorkspace() {
   for (const element of document.querySelectorAll("[data-write]")) element.hidden = session.role !== "editor";
   byId("audit-link").hidden = session.role !== "auditor";
+  byId("directory-link").hidden = session.role !== "identity_admin";
   byId("login").hidden = true;
   byId("workspace").hidden = false;
   byId("signout").hidden = false;
   await navigate();
+}
+byId("signout").addEventListener("click", async () => {
+  const result = await fetch("/v1/sso/logout", { method: "POST" });
+  if (result.ok) location.reload();
+  else showNotice("Sign-out could not finish. Try again.");
 });
-byId("signout").addEventListener("click", () => location.reload());
+fetch("/v1/sso/status", { cache: "no-store" })
+  .then((response) => response.json()).then((value) => { byId("sso-link").hidden = !value.available; })
+  .catch(() => {});
+request("/session").then((value) => {
+  session = value;
+  return enterWorkspace();
+}).catch(() => {});
 window.addEventListener("hashchange", navigate);
 byId("search").addEventListener("input", renderInventory);
 
@@ -463,7 +623,8 @@ onSubmit("inventory-form", async (data) => {
   showNotice("Inventory entry saved.");
 });
 onSubmit("readiness-form", async (answers) => {
-  renderReadiness(await request("/readiness/assessments", "POST", { answers }));
+  const params = "?handles_sensitive_data=" + byId("sensitive-readiness").checked;
+  renderReadiness(await request("/readiness/adaptive" + params, "POST", { answers }));
   showNotice("Readiness assessment saved.");
 });
 onSubmit("risk-form", async (data) => {
@@ -475,4 +636,43 @@ onSubmit("draft-form", async (data) => {
   data.applies_to_agents = Boolean(data.applies_to_agents);
   renderDraft("draft-preview", await request("/policy-drafts", "POST", data));
   showNotice("Policy draft saved.");
+});
+
+byId("register-kind").addEventListener("change", () => runPolicyAction(() => load.operations()));
+onSubmit("register-form", async (data) => {
+  const kind = byId("register-kind").value;
+  const body = JSON.parse(data.body);
+  await request(`/registers/${kind}/${encodeURIComponent(data.id)}?expected_version=${Number(data.version)}`,
+    "PUT", { ...body, kind });
+  await load.operations();
+  showNotice("Register entry saved.");
+});
+onSubmit("request-form", async ({ group, justification, ...simulation }) => {
+  await request("/access-requests", "POST", {
+    group, justification, simulation: { ...simulation, role: group, policy_version: "1.1.0" },
+  });
+  await load.access();
+  showNotice("Access review requested.");
+});
+
+byId("sensitive-readiness").addEventListener("change", () => runPolicyAction(() => load.readiness()));
+onSubmit("rule-form", async ({ scope, decision }) => {
+  await request("/guardrail-rules", "POST", { scope: JSON.parse(scope), decision });
+  await load.guardrails();
+  showNotice("Rule proposed.");
+});
+onSubmit("gate-form", async ({ agent_id, operation, revision_id, version }) => {
+  await request("/guardrail-deployments", "POST", {
+    agent_id, operation, revision_id: revision_id || null, expected_version: Number(version),
+  });
+  await load.guardrails();
+  showNotice("Gate deployment updated.");
+});
+onSubmit("member-form", async ({ id, subject, role, state, groups, version }) => {
+  await request("/identity/members/" + encodeURIComponent(id), "PUT", {
+    subject, role, state, groups: groups.split(",").map((value) => value.trim()).filter(Boolean),
+    expected_version: Number(version),
+  });
+  await load.directory();
+  showNotice("Member saved.");
 });

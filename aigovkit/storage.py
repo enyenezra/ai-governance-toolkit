@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter
 
+from aigovkit.directory import DIRECTORY_SCHEMA
 from aigovkit.models import Record, RiskReport
 from aigovkit.tenancy import Session
 
@@ -109,6 +110,7 @@ class PostgresInventory:
                         sql.Identifier(self.schema)
                     )
                 )
+            conn.execute(DIRECTORY_SCHEMA)
             conn.execute(SCHEMA)
 
     def put(self, records: Iterable[Record]) -> None:

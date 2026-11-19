@@ -169,7 +169,7 @@ reads PostgreSQL metadata and makes no changes. See the
 | Developer integrations | REST and OpenAPI, synthetic examples, and a documented read-only connector contract. Other providers are unimplemented |
 | Open-source infrastructure | Docker Compose, PostgreSQL integration tests, CI, MIT licence, contribution and security docs, and issue templates |
 | Policy workflow | Save immutable revisions, require independent review and publication, and record acknowledgements against the exact published version |
-| Identity and audit | Tenant-scoped keys or OIDC access tokens with named roles. Auditors can view attributable changes across the governance API. Browser redirect sign-in remains planned |
+| Identity and audit | Tenant-scoped keys or OIDC access tokens with named roles. Auditors can view attributable changes across the governance API. Optional browser SSO and managed provisioning are available for compatible issuers |
 | Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator, policy library, published policies and proposed control catalogue |
 
 ## Run multiple organisations
@@ -236,3 +236,12 @@ role and table. Use a dedicated test database and an account permitted to do thi
 ## Licence
 
 [MIT](LICENSE)
+
+## Governance expansion
+
+See [the expansion guide](docs/governance-expansion.md) for configurable
+browser SSO, managed identity and access requests, policy exports, review
+schedules, acknowledgement coverage, runtime gate deployment, provider
+discovery, the risk register and operational monitoring. Provider connectors
+are read-only. Live provider access, external enforcement and telemetry
+coverage depend on deployment configuration.

@@ -141,3 +141,23 @@ def test_approved_publication_and_versioned_acknowledgement(monkeypatch):
     assert reader.post("/v1/policy-acknowledgements", json=first).status_code == 409
     assert reader.post("/v1/policy-acknowledgements", json=second).status_code == 200
     assert len(reader.get("/v1/policy-acknowledgements").json()) == 2
+
+    assert publisher.get("/v1/policy-review-schedule").json()[0]["version"] == 2
+    redline = reader.get(
+        f"/v1/policy-drafts/{draft['id']}/compare?from_version=1&to_version=2"
+    )
+    assert redline.status_code == 200
+    assert redline.json()["changes"][0]["after"] == "Review policy version 2."
+    assert (
+        publisher.get(f"{detail}/2/acknowledgement-summary").json()["acknowledged"] == 1
+    )
+    assert reader.get(f"{detail}/2/acknowledgement-summary").status_code == 403
+    for extension, prefix in (
+        ("pdf", b"%PDF"),
+        ("docx", b"PK"),
+        ("md", b"    AI Agent"),
+    ):
+        export = reader.get(f"{detail}/2/export/{extension}")
+        assert export.status_code == 200
+        assert export.content.startswith(prefix)
+        assert "attachment" in export.headers["content-disposition"]

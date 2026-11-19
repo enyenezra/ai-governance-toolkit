@@ -8,15 +8,26 @@ from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import Field, StringConstraints, TypeAdapter, ValidationError
 
+from aigovkit.directory import managed_member
 from aigovkit.models import Identifier, StrictModel
 from aigovkit.oidc import CHALLENGE, invalid_token, verify_access_token
+from aigovkit.sso import cookie_token
 
 api_key = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer = HTTPBearer(auto_error=False)
 Key = Annotated[str, StringConstraints(min_length=32, max_length=256)]
 
 
-Role = Literal["reader", "editor", "reviewer", "publisher", "auditor"]
+Role = Literal[
+    "reader",
+    "editor",
+    "reviewer",
+    "publisher",
+    "auditor",
+    "identity_admin",
+    "gateway",
+    "observer",
+]
 
 
 class MemberKey(StrictModel):
@@ -81,18 +92,49 @@ def schema_for(tenant: str) -> str:
 
 
 def authorize_member(request: Request, session: Session) -> Session:
+    if session.role == "observer":
+        if request.method != "PUT" or not request.url.path.startswith(
+            ("/v1/registers/signal/", "/v1/registers/discovery/")
+        ):
+            raise HTTPException(
+                403, "Observer credentials can submit monitoring evidence only."
+            )
+        return session
+    if session.role == "gateway":
+        if request.method != "POST" or request.url.path != "/v1/guardrail-checks":
+            raise HTTPException(
+                403, "Gateway credentials are restricted to runtime checks."
+            )
+        return session
     allowed_post = request.method == "POST" and (
-        request.url.path == "/v1/policy-acknowledgements"
+        request.url.path
+        in {
+            "/v1/policy-acknowledgements",
+            "/v1/access-requests",
+            "/v1/access-recertifications",
+        }
+        or (session.role == "reviewer" and request.url.path == "/v1/access-decisions")
+        or (
+            session.role == "publisher"
+            and request.url.path
+            in {"/v1/guardrail-deployments", "/v1/guardrail-verifications"}
+        )
         or (session.role == "reviewer" and request.url.path == "/v1/policy-reviews")
         or (
             session.role == "publisher"
             and request.url.path == "/v1/policy-publications"
         )
     )
+    allowed_directory = (
+        request.method == "PUT"
+        and session.role == "identity_admin"
+        and request.url.path.startswith("/v1/identity/members/")
+    )
     if (
         request.method not in {"GET", "HEAD"}
         and session.role != "editor"
         and not allowed_post
+        and not allowed_directory
     ):
         raise HTTPException(403, "This role cannot perform that operation.")
     return session
@@ -113,16 +155,9 @@ def authenticate(
             raise HTTPException(400, "Send one authentication credential.")
         if not authorization or not tenants:
             raise invalid_token()
-        subject = verify_access_token(authorization.credentials)
-        for tenant in tenants:
-            for member in tenant.members:
-                if member.oidc_subject == subject:
-                    return authorize_member(
-                        request, Session(tenant.id, member.role, member.id, "oidc")
-                    )
-        raise HTTPException(
-            403, "This identity has no configured membership.", headers=CHALLENGE
-        )
+        return oidc_session(request, authorization.credentials, tenants=tenants)
+    if provided is None and (token := cookie_token(request)):
+        return oidc_session(request, token, tenants=tenants)
 
     key = (provided or "").encode()
     if tenants is None:
@@ -149,3 +184,46 @@ def authenticate(
                     raise HTTPException(403, "An editor key is required.")
                 return Session(tenant.id, "reader")
     raise HTTPException(401, "Invalid API key.", headers=CHALLENGE)
+
+
+def oidc_session(
+    request: Request,
+    token: str,
+    *,
+    tenants: list[TenantKeys] | None = None,
+    client_id: str | None = None,
+) -> Session:
+    if tenants is None:
+        try:
+            tenants = configured_tenants()
+        except ValueError:
+            raise HTTPException(
+                503, "Tenant authentication is misconfigured."
+            ) from None
+    if not tenants:
+        raise invalid_token()
+    subject = verify_access_token(token, client_id)
+    for tenant in tenants:
+        for member in tenant.members:
+            if member.oidc_subject == subject:
+                return authorize_member(
+                    request, Session(tenant.id, member.role, member.id, "oidc")
+                )
+    membership = managed_member(os.environ["AIGOVKIT_OIDC_ISSUER"], subject)
+    if membership and membership["state"] == "active":
+        for tenant in tenants:
+            if tenant.id == membership["tenant_id"] and not any(
+                member.id == membership["member_id"] for member in tenant.members
+            ):
+                return authorize_member(
+                    request,
+                    Session(
+                        tenant.id,
+                        membership["role"],
+                        membership["member_id"],
+                        "oidc",
+                    ),
+                )
+    raise HTTPException(
+        403, "This identity has no configured membership.", headers=CHALLENGE
+    )

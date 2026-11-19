@@ -4,6 +4,13 @@ services:
       AIGOVKIT_OIDC_ISSUER: ${AIGOVKIT_OIDC_ISSUER:?Set the OIDC issuer}
       AIGOVKIT_OIDC_AUDIENCE: ${AIGOVKIT_OIDC_AUDIENCE:?Set the API audience}
       AIGOVKIT_OIDC_JWKS_FILE: /run/aigovkit/public-jwks.json
+      AIGOVKIT_SSO_AUTHORIZATION_URL:
+      AIGOVKIT_SSO_TOKEN_URL:
+      AIGOVKIT_SSO_CALLBACK_URL:
+      AIGOVKIT_SSO_CLIENT_ID:
+      AIGOVKIT_SSO_CLIENT_SECRET:
+      AIGOVKIT_SSO_COOKIE_KEY:
+      AIGOVKIT_SSO_SCOPE:
     volumes:
       - type: bind
         source: ${AIGOVKIT_OIDC_JWKS_FILE:?Set the absolute path to the public JWKS}
