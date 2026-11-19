@@ -1,12 +1,10 @@
 import os
-import secrets
 from datetime import UTC, datetime
 from typing import Annotated, Protocol
 from uuid import uuid4
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from fastapi.security import APIKeyHeader
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from aigovkit.classification import suggest_classification
 from aigovkit.models import (
@@ -24,18 +22,7 @@ from aigovkit.models import (
 )
 from aigovkit.policy import POLICY_VERSIONS, evaluate
 from aigovkit.storage import PostgresInventory
-
-api_key = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-def authenticate(provided: Annotated[str | None, Security(api_key)]) -> None:
-    expected = os.environ.get("AIGOVKIT_API_KEY", "")
-    if len(expected) < 32:
-        raise HTTPException(503, "Governance API key is not configured.")
-    if provided is None or not secrets.compare_digest(
-        provided.encode(), expected.encode()
-    ):
-        raise HTTPException(401, "Invalid API key.")
+from aigovkit.tenancy import Session, authenticate, schema_for
 
 
 class Inventory(Protocol):
@@ -44,13 +31,18 @@ class Inventory(Protocol):
     def save_report(self, report: RiskReport) -> None: ...
     def get_report(self, report_id: str) -> RiskReport | None: ...
     def list_reports(self, offset: int, limit: int) -> list[RiskReport]: ...
+    def put_document(self, kind: str, document_id: str, body: dict, *, replace=False): ...
+    def get_document(self, kind: str, document_id: str) -> dict | None: ...
+    def documents(self, kind: str, offset: int, limit: int) -> list[dict]: ...
 
 
-def get_inventory() -> Inventory:
+def get_inventory(session: Annotated[Session, Depends(authenticate)]) -> Inventory:
     dsn = os.environ.get("AIGOVKIT_DATABASE_URL")
     if not dsn:
         raise HTTPException(503, "Governance database is not configured.")
-    return PostgresInventory(dsn)
+    return PostgresInventory(
+        dsn, schema_for(session.tenant) if session.tenant else None
+    )
 
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(authenticate)])

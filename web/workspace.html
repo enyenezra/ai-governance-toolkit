@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIGovKit · Governance workspace</title>
+  <link rel="stylesheet" href="/assets/workspace.css">
+  <script src="/assets/workspace.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span aria-hidden="true">◆</span> AIGovKit</a>
+    <nav aria-label="Workspace">
+      <a href="#overview">Governance dashboard</a>
+      <a href="#organisation">Organisation setup</a>
+      <a href="#inventory">AI systems &amp; agents</a>
+      <a href="#readiness">Readiness assessment</a>
+      <a href="#risk">Risk assessment</a>
+      <a href="#generator">AI policy generator</a>
+      <a href="#library">Policy library</a>
+      <a href="#controls">Control catalogue</a>
+    </nav>
+    <div class="sidebar-footer"><a href="/docs">API documentation ↗</a></div>
+  </aside>
+  <main>
+    <header><span>Governance workspace</span><button id="signout" type="button" hidden>Sign out</button></header>
+    <div id="content">
+      <section class="card" id="login">
+        <h1>Sign in to AIGovKit</h1>
+        <p>Enter the API key issued for your organisation. Closing or reloading this page clears it.</p>
+        <form id="login-form">
+          <label>Organisation API key <input name="key" type="password" maxlength="256" required autocomplete="off"></label>
+          <button type="submit">Open workspace</button>
+        </form>
+      </section>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <div id="workspace" hidden>
+        <section id="overview" class="page">
+          <h1>Executive governance dashboard</h1>
+          <p class="subtitle" id="scope"></p>
+          <div id="metrics" class="metrics"></div>
+          <section class="card"><h2>Recent risk assessments</h2><div id="recent"></div></section>
+        </section>
+        <section id="organisation" class="page" hidden>
+          <h1>Organisation setup</h1>
+          <section class="card"><form id="organisation-form" data-write>
+            <label>Organisation name <input name="name" maxlength="160" required></label>
+            <div class="row">
+              <label>Sector <input name="sector" maxlength="160" required></label>
+              <label>Jurisdiction <input name="jurisdiction" maxlength="160" required></label>
+            </div>
+            <label>Adoption stage <select name="adoption_stage"><option value="exploring">Exploring</option><option value="piloting">Piloting</option><option value="operating">Operating</option></select></label>
+            <button>Save organisation</button>
+          </form><p id="profile-read"></p></section>
+        </section>
+        <section id="inventory" class="page" hidden>
+          <h1>AI systems &amp; agent inventory</h1>
+          <div class="split">
+            <section class="card">
+              <div class="section-head"><h2>Registered systems</h2><input id="search" type="search" aria-label="Search loaded inventory" placeholder="Search inventory"></div>
+              <div id="entries"></div>
+            </section>
+            <section class="card" data-write>
+              <h2>Register a system</h2>
+              <form id="inventory-form">
+                <label>Record type <select name="kind" id="kind"><option value="tool">AI application</option><option value="agent">AI agent</option></select></label>
+                <div class="row"><label>ID <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}"></label><label>Name <input name="name" maxlength="120" required></label></div>
+                <label id="parent" hidden>Parent application ID <input name="tool_id" disabled></label>
+                <label>Owner ID <input name="owner" required></label>
+                <label>Intended purpose IDs <input name="purposes" placeholder="ticket-summary"></label>
+                <label>Capability IDs <input name="capabilities" placeholder="summarisation"></label>
+                <button>Register</button>
+              </form>
+            </section>
+          </div>
+        </section>
+        <section id="readiness" class="page" hidden>
+          <h1>AI readiness assessment</h1>
+          <div class="split">
+            <section class="card" data-write><form id="readiness-form"><div id="questions"></div><button>Save assessment</button></form></section>
+            <section class="card"><h2>Latest readiness result</h2><div id="readiness-result"></div></section>
+          </div>
+        </section>
+        <section id="risk" class="page" hidden>
+          <h1>AI risk assessment</h1>
+          <div class="split">
+            <section class="card" data-write>
+              <h2>Simulate access</h2>
+              <form id="risk-form">
+                <div class="row"><label>Department ID <input name="department_id" required></label><label>Role <input name="role" required></label></div>
+                <div class="row"><label>Agent ID <input name="agent_id" required></label><label>Asset ID <input name="asset_id" required></label></div>
+                <div class="row"><label>Purpose ID <input name="purpose" required></label><label>Action <select name="action"><option>read</option><option>write</option><option>delete</option><option>admin</option></select></label></div>
+                <button>Assess and save report</button>
+              </form>
+            </section>
+            <section class="card"><h2>Latest report</h2><div id="risk-result"></div></section>
+          </div>
+        </section>
+        <section id="generator" class="page" hidden>
+          <h1>AI policy generator</h1>
+          <div class="split">
+            <section class="card" data-write>
+              <h2>Configure a template</h2>
+              <form id="draft-form">
+                <label>Template <select name="template_id" id="templates"></select></label>
+                <label>Policy owner <input name="owner" required maxlength="160"></label>
+                <label>Scope <input name="scope" required maxlength="160"></label>
+                <label>Review interval in days <input name="review_days" required type="number" value="90" min="30" max="365"></label>
+                <label class="check"><input type="checkbox" name="applies_to_agents" id="agent-scope"> Applies to agents</label>
+                <label id="contact" hidden>Human oversight contact <input name="oversight_contact" maxlength="160" disabled></label>
+                <button>Generate and save draft</button>
+              </form>
+            </section>
+            <section class="card"><h2>Draft preview</h2><div id="draft-preview">Select a saved draft from the policy library or generate a new one.</div></section>
+          </div>
+        </section>
+        <section id="library" class="page" hidden><h1>Policy library</h1><div class="split"><section class="card"><h2>Saved drafts</h2><div id="drafts"></div></section><section class="card"><h2>Policy details</h2><div id="draft-detail">Select a draft to read its clauses.</div></section></div></section>
+        <section id="controls" class="page" hidden><h1>Control catalogue</h1><section class="card"><div id="control-list"></div></section></section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, release/foundation]
   pull_request:
     branches: [main]
 
@@ -34,6 +34,13 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Check browser scripts
+        run: |
+          node --check web/assessment.js
+          node --check web/workspace.js
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check .
       - run: python -m pytest -q

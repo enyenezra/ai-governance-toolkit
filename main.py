@@ -1,16 +1,31 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from aigovkit.api import router
+from aigovkit.foundation import router as foundation_router
 
 app = FastAPI(title="AI Governance Toolkit", version="0.1.0")
 app.include_router(router)
+app.include_router(foundation_router)
 
+
+@app.middleware("http")
+async def protect_sensitive_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/v1/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+WORKSPACE_CSP = (
+    "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+    "object-src 'none'; form-action 'self'"
+)
 WEB_DIR = Path(__file__).resolve().parent / "web"
 app.mount("/assets", StaticFiles(directory=WEB_DIR), name="assets")
 
@@ -37,6 +52,13 @@ class AssessmentResult(BaseModel):
 @app.get("/", include_in_schema=False)
 def assessment_page() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/workspace", include_in_schema=False)
+def workspace_page() -> FileResponse:
+    return FileResponse(
+        WEB_DIR / "workspace.html", headers={"Content-Security-Policy": WORKSPACE_CSP}
+    )
 
 
 @app.get("/health")

@@ -9,10 +9,15 @@ the report.
 
 ## Deployment boundaries
 
-Run the API on a trusted network behind TLS. Give each organisation its own
-instance, database and randomly generated API key. The shared key grants all
-governance API privileges. Store it and the database connection string in a
-secret manager. Rotate the key by replacing it and restarting the service.
+Run the API on a trusted network behind TLS. For shared deployments, provision unique, randomly generated tenant reader
+and editor keys. Editors can change governance records. The API chooses the
+schema using the verified key. It ignores tenant identifiers supplied by
+clients. Store keys and the database connection string in a secret manager
+and restart the service after rotation. Browser sign-in keeps the key in
+memory and clears it on reload. Shared keys provide role separation but do
+not identify individual users. Database administrator or API compromise can
+expose all schemas. Use separate instances and database credentials where
+that infrastructure-level boundary is required.
 Avoid logging request headers and bodies at your proxy.
 
 Use a dedicated PostgreSQL runtime account with only the required table read

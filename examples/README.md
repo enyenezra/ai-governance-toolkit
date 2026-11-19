@@ -15,3 +15,6 @@ department and `ticket-summary` purpose. The `helper` agent's read of
 `tickets` is eligible for human review. Its ticket write is denied because
 the role has no write need. Its payroll read is denied under the restricted
 data rule. These outcomes are recommendations.
+
+Use [organisation.json](organisation.json) to populate the foundation workspace
+with a synthetic organisation profile using `PUT /v1/organisation`.

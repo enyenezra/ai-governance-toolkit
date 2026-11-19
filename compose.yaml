@@ -15,7 +15,8 @@ services:
   api:
     build: .
     environment:
-      AIGOVKIT_API_KEY: ${AIGOVKIT_API_KEY:?Set AIGOVKIT_API_KEY}
+      AIGOVKIT_API_KEY: ${AIGOVKIT_API_KEY:-}
+      AIGOVKIT_TENANTS:
       AIGOVKIT_DATABASE_URL: "host=db dbname=aigovkit user=aigovkit"
       PGPASSWORD: ${AIGOVKIT_DB_PASSWORD:?Set AIGOVKIT_DB_PASSWORD}
     depends_on:

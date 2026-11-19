@@ -1,8 +1,7 @@
 # Architecture
 
-AIGovKit is a FastAPI process with a PostgreSQL database. A deployment represents
-one organisation. The versioned REST API authenticates requests before loading
-inventory. The original scoring demo is stateless and independent.
+AIGovKit is a FastAPI process with a PostgreSQL database. The versioned REST API authenticates requests and resolves a server-side
+organisation schema before loading records. See [the foundation plan](foundation-plan.md). The original scoring demo is stateless and independent.
 
 ## Data and flow
 
@@ -65,8 +64,8 @@ evaluate row-level security, column grants, role switching or actual queries.
 Operators reconcile this evidence with declarations. The verifier never
 writes inventory or alters access. No connector sends data to an LLM.
 
-Each deployment uses one shared API key with read and write privileges.
 Version 0.1.0 loads the inventory for each evaluation and relies on an operator
-to verify declarations. It supports small inventories. Plan separate deployments
-and databases for organisations. Additional provider connectors, approval
+to verify declarations. It supports small inventories. Tenant keys isolate
+records at the application layer. Use a separate deployment and database if
+you need an infrastructure isolation boundary. Additional provider connectors, approval
 workflows, audit logs and enterprise identity are future work.

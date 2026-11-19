@@ -16,6 +16,20 @@ the OpenAPI documentation, [architecture overview](docs/architecture.md) and
 [sample inputs](examples/README.md). See [Contributing](CONTRIBUTING.md) for
 ways to help and [Security](SECURITY.md) for deployment and reporting guidance.
 
+## Foundation workspace
+
+Open [the workspace](http://127.0.0.1:8000/workspace) after starting the demo.
+Sign in with the configured key. Set the organisation profile, register an AI
+application or agent, and complete the readiness questionnaire. Generate one
+of 12 saved policy drafts and review its clauses and proposed controls in the
+policy library. The dashboard uses saved assessments and registered inventory.
+The original scoring demo remains available at `/`.
+
+Policy drafts require review. Publication, employee acknowledgements, evidence
+workflows, and enforcement are planned. See the
+[foundation plan](docs/foundation-plan.md) for the baseline audit, security
+model and release roadmap.
+
 ## Run a local demo
 
 The full demo requires Docker Compose and a terminal. Run these commands from
@@ -26,6 +40,15 @@ export AIGOVKIT_DB_PASSWORD="$(openssl rand -hex 24)"
 export AIGOVKIT_API_KEY="$(openssl rand -hex 32)"
 docker compose up --build --wait
 docker compose exec -T api python -m aigovkit.bootstrap --import-json examples/department-inventory.json
+```
+
+For the demo organisation, open **Organisation setup** in the workspace and
+enter your own profile, or load the synthetic profile:
+
+```sh
+curl -fsS -X PUT http://127.0.0.1:8000/v1/organisation \
+  -H "X-API-Key: $AIGOVKIT_API_KEY" -H 'Content-Type: application/json' \
+  --data-binary @examples/organisation.json
 ```
 
 The API listens on localhost. Compose retains inventory and reports in its
@@ -98,6 +121,12 @@ approval for any real-world access decision. AIGovKit never grants or changes ac
 | `POST /v1/classification/suggestions` | Suggest a classification from structured data flags |
 | `POST /v1/reports` | Run a simulation and save its JSON result |
 | `GET /v1/reports` and `GET /v1/reports/{report_id}` | List past reports or retrieve one by ID |
+| `GET /v1/session` | Return the authenticated organisation and role |
+| `GET /v1/organisation`, `PUT /v1/organisation` | Read or update the organisation profile |
+| `GET /v1/readiness/questions` | Get the readiness questionnaire and scoring version |
+| `GET /v1/readiness/assessments`, `POST /v1/readiness/assessments` | List or save explainable readiness results |
+| `GET /v1/policy-templates`, `GET /v1/controls` | List the templates and proposed controls |
+| `GET /v1/policy-drafts`, `POST /v1/policy-drafts`, `GET /v1/policy-drafts/{id}` | List, generate or retrieve saved drafts |
 | `GET /health` | Check process liveness |
 
 For example, register an asset with
@@ -133,7 +162,24 @@ reads PostgreSQL metadata and makes no changes. See the
 | Risk scoring and reporting | Versioned JSON findings, controls and saved reports. Scores are 25 for low, 50 for medium, and 100 for high |
 | Developer integrations | REST and OpenAPI, synthetic examples, and a documented read-only connector contract. Other providers are unimplemented |
 | Open-source infrastructure | Docker Compose, PostgreSQL integration tests, CI, MIT licence, contribution and security docs, and issue templates |
-| Identity, approvals and audit | One shared key per organisation deployment. Reports capture past recommendations. Formal approvals, immutable audit logging and enterprise identity are unimplemented |
+| Identity, approvals and audit | Tenant-scoped reader and editor API keys. Reports capture past recommendations. Per-user identity, formal approvals and immutable audit logging are planned |
+| Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator and library, and proposed control catalogue |
+
+## Run multiple organisations
+
+Configure `AIGOVKIT_TENANTS` with a JSON array of objects containing `id`,
+`editor_key` and an optional `reader_key`. Generate a different random key of
+at least 32 characters for each role and organisation. Run bootstrap before
+starting the API, or recreate the Compose API service after updating the
+configuration. Each key resolves to one organisation and schema. Reader keys
+can view records. Editor keys can write records and run simulations.
+The legacy key works only when the tenant configuration is absent.
+
+To load example inventory in tenant mode, use
+`python -m aigovkit.bootstrap --tenant YOUR_TENANT --import-json examples/department-inventory.json`.
+Existing single-organisation data stays in its legacy schema. Moving it into
+a tenant schema requires an operator-managed migration. See
+[deployment boundaries](SECURITY.md).
 
 ## Original risk scoring demo
 

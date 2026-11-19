@@ -12,3 +12,8 @@ outcomes require a new version and a documented transition.
 Connector changes should preserve the read-only contract and use local fixtures
 for tests. Keep credentials in environment variables or a secret manager.
 Report security issues privately using [SECURITY.md](SECURITY.md).
+
+Review the [code of conduct](CODE_OF_CONDUCT.md) and [maintainer guide](docs/maintainers.md).
+Use `node --check web/workspace.js` after changing the workspace script and
+verify the Compose onboarding flow with synthetic inventory. Explicitly test keys
+from a second organisation for changes to shared API or storage code.
