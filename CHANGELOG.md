@@ -42,3 +42,9 @@
 - Added Microsoft 365 and Google Workspace app and managed-device discovery.
 - Added passive network device reconciliation and approved DNS or proxy signals.
 - Added provider previews, scheduled sync, and Connected discovery and Devices views.
+
+## Pilot-readiness preview
+
+- Added connector coverage, latest attempt state, evidence and local disconnect controls.
+- Added repeatable Compose demo, backup and restore guidance, and a pilot checklist.
+- Added browser accessibility and permissions to CI and tested an adapter against the database-backed gate.

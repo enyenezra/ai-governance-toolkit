@@ -18,7 +18,7 @@ from pydantic import SecretStr, TypeAdapter, ValidationError
 
 from aigovkit.api import Store
 from aigovkit.device_discovery import fingerprint, mac_address, timestamp, upsert_device
-from aigovkit.foundation import Actor, database_call
+from aigovkit.foundation import Actor, Limit, Offset, database_call
 from aigovkit.models import Identifier, StrictModel
 from aigovkit.policy_review import named_member
 from aigovkit.provider_discovery import linked_pages, read_only_http
@@ -385,6 +385,89 @@ def save_connection_state(
     database_call(write)
 
 
+SOURCE_DETAILS = {
+    "entra-apps": (
+        "application_inventory",
+        "Registered application. This does not establish usage.",
+    ),
+    "entra-sign-ins": ("sign_in", "Sign-in activity in the queried seven-day window."),
+    "google-oauth": (
+        "oauth_authorisation",
+        "Authorisation in the queried seven-day window. This does not establish usage.",
+    ),
+}
+
+
+def enabled_sources(config: Microsoft | Google | None) -> list[str]:
+    if config is None:
+        return []
+    fields = (
+        (
+            ("applications", "entra-apps"),
+            ("sign_ins", "entra-sign-ins"),
+            ("devices", "intune"),
+        )
+        if isinstance(config, Microsoft)
+        else (
+            ("oauth_audit", "google-oauth"),
+            ("chromeos", "google-chromeos"),
+            ("mobile", "google-mobile"),
+        )
+    )
+    return [source for field, source in fields if getattr(config, field)]
+
+
+def disconnected(store: Store, provider: Provider) -> bool:
+    state = database_call(
+        store.get_document, "workspace_discovery_connection", provider
+    )
+    return bool(state and not state.get("enabled"))
+
+
+@router.put("/workspace-discovery/{provider}/connection")
+def set_connection(
+    provider: Provider, request: Scheduling, actor: Actor, store: Store
+) -> dict:
+    named_member(actor, "editor")
+    if request.enabled:
+        settings(actor.tenant, provider)
+
+    def write():
+        with store.connect() as conn:
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':workspace-sync',0))"
+            )
+            conn.execute(
+                """INSERT INTO foundation_documents (kind,id,body)
+                   VALUES ('workspace_discovery_connection',%s,%s)
+                   ON CONFLICT(kind,id) DO UPDATE SET body=EXCLUDED.body""",
+                (provider, Jsonb(request.model_dump())),
+            )
+            if not request.enabled:
+                conn.execute(
+                    """DELETE FROM foundation_documents
+                       WHERE kind IN ('workspace_discovery_schedule','workspace_discovery_preview')
+                         AND id=%s""",
+                    (provider,),
+                )
+            store.audit(
+                conn,
+                "discovery.reconnected"
+                if request.enabled
+                else "discovery.disconnected",
+                "provider",
+                provider,
+            )
+            return request.model_dump()
+
+    return database_call(write)
+
+
+@router.get("/workspace-discovery/evidence")
+def evidence(store: Store, offset: Offset = 0, limit: Limit = 20) -> list[dict]:
+    return database_call(store.documents, "discovery_evidence", offset, limit)
+
+
 @router.get("/workspace-discovery/connections")
 def connections(store: Store, actor: Actor) -> list[dict]:
     config = configuration(actor.tenant)
@@ -393,6 +476,11 @@ def connections(store: Store, actor: Actor) -> list[dict]:
             "provider": provider,
             "configured": selected is not None,
             "admin_portal": PORTALS[provider],
+            "enabled_sources": enabled_sources(selected),
+            "disconnected": disconnected(store, provider),
+            "last_attempt": database_call(
+                store.get_document, "workspace_discovery_attempt", provider
+            ),
             "scheduled": bool(
                 (
                     database_call(
@@ -416,6 +504,8 @@ def connections(store: Store, actor: Actor) -> list[dict]:
 def preview(provider: Provider, actor: Actor, store: Store) -> dict:
     named_member(actor, "editor")
     config = settings(actor.tenant, provider)
+    if disconnected(store, provider):
+        raise HTTPException(409, "Reconnect this provider before previewing.")
     result = discover(config, 1)
     save_connection_state(
         store,
@@ -444,6 +534,8 @@ def schedule(
     named_member(actor, "editor")
     body = request.model_dump()
     if request.enabled:
+        if disconnected(store, provider):
+            raise HTTPException(409, "Reconnect this provider before scheduling.")
         config = settings(actor.tenant, provider)
         verified = database_call(
             store.get_document, "workspace_discovery_preview", provider
@@ -470,6 +562,15 @@ def persist(store: Store, actor: Actor, provider: Provider, result: dict) -> dic
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':workspace-sync',0))"
             )
+            state = cursor.execute(
+                """SELECT body FROM foundation_documents
+                   WHERE kind='workspace_discovery_connection' AND id=%s""",
+                (provider,),
+            ).fetchone()
+            if state and not state["body"].get("enabled"):
+                raise HTTPException(
+                    409, "The provider was disconnected before sync completed."
+                )
             for item in result["applications"]:
                 key = fingerprint(actor, f"workspace:{item['source']}:{item['id']}")
                 body = {
@@ -495,6 +596,26 @@ def persist(store: Store, actor: Actor, provider: Provider, result: dict) -> dic
                         (key + ":1", Jsonb(body)),
                     )
                     created += 1
+                event_type, explanation = SOURCE_DETAILS.get(
+                    item["source"], ("unknown", "Review the provider source.")
+                )
+                event = {
+                    "finding_id": key,
+                    "provider": provider,
+                    "source": item["source"],
+                    "name": item["name"],
+                    "event_type": event_type,
+                    "interpretation": explanation,
+                    "observed_count": item["count"],
+                    "collected_at": now.isoformat(),
+                    "partial": result["partial"],
+                }
+                cursor.execute(
+                    """INSERT INTO foundation_documents (kind,id,body)
+                       VALUES ('discovery_evidence',%s,%s)
+                       ON CONFLICT(kind,id) DO UPDATE SET body=EXCLUDED.body, created_at=clock_timestamp()""",
+                    (key, Jsonb(event)),
+                )
             for item in result["devices"]:
                 kwargs = {key: item[key] for key in ("mac", "provider_id")}
                 device = upsert_device(
@@ -525,12 +646,46 @@ def persist(store: Store, actor: Actor, provider: Provider, result: dict) -> dic
     return database_call(write)
 
 
+def run_sync(
+    store: Store, actor: Actor, provider: Provider, state: dict | None = None
+) -> dict:
+    try:
+        config = settings(actor.tenant, provider)
+        if disconnected(store, provider):
+            raise HTTPException(409, "Reconnect this provider before syncing.")
+        if state and state.get("revision") != config_revision(config):
+            raise HTTPException(
+                409, "Preview and enable the changed configuration again."
+            )
+        result = persist(store, actor, provider, discover(config, PAGES))
+    except HTTPException as error:
+        save_connection_state(
+            store,
+            "workspace_discovery_attempt",
+            provider,
+            {
+                "at": datetime.now(UTC).isoformat(),
+                "status": "failed",
+                "status_code": error.status_code,
+            },
+        )
+        raise
+    save_connection_state(
+        store,
+        "workspace_discovery_attempt",
+        provider,
+        {
+            "at": result["synced_at"],
+            "status": "partial" if result["partial"] else "success",
+        },
+    )
+    return result
+
+
 @router.post("/workspace-discovery/{provider}/sync")
 def sync(provider: Provider, actor: Actor, store: Store) -> dict:
     named_member(actor, "editor")
-    return persist(
-        store, actor, provider, discover(settings(actor.tenant, provider), PAGES)
-    )
+    return run_sync(store, actor, provider)
 
 
 @router.post("/workspace-discovery/run")
@@ -543,14 +698,7 @@ def scheduled(actor: Actor, store: Store) -> dict:
         )
         if state and state["enabled"]:
             try:
-                config = settings(actor.tenant, provider)
-                if state.get("revision") != config_revision(config):
-                    raise HTTPException(
-                        409, "Preview and enable the changed configuration again."
-                    )
-                outcomes[provider] = persist(
-                    store, actor, provider, discover(config, PAGES)
-                )
+                outcomes[provider] = run_sync(store, actor, provider, state)
             except HTTPException as error:
                 outcomes[provider] = {"failed": True, "status": error.status_code}
     return outcomes

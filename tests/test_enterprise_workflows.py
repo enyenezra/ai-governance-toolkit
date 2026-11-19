@@ -94,12 +94,43 @@ def test_gate_deployment_rollback_verification_and_suspend(tenant):
         },
     )
     assert verification.json()["matched"]
+
+    import httpx
+    from fastapi import FastAPI
+
+    from aigovkit.gate_adapter import EnforcedRoutes
+
+    operations = []
+    protected = FastAPI()
+
+    @protected.post("/operation")
+    def operation():
+        operations.append("executed")
+        return {"executed": True}
+
+    def gate(request):
+        result = gateway.post(check, json=json.loads(request.content))
+        return httpx.Response(result.status_code, json=result.json())
+
+    guarded = TestClient(
+        EnforcedRoutes(
+            protected,
+            "https://gate.example.invalid",
+            gateway.headers["X-API-Key"],
+            {("POST", "/operation"): SCENARIO},
+            transport=httpx.MockTransport(gate),
+        )
+    )
+    assert guarded.post("/operation").status_code == 200
+    assert operations == ["executed"]
     assert deploy(1, "deploy", deny).status_code == 200
-    assert gateway.post(check, json=SCENARIO).status_code == 403
+    assert guarded.post("/operation").status_code == 403
+    assert operations == ["executed"]
     assert deploy(2, "rollback", allow).status_code == 200
-    assert gateway.post(check, json=SCENARIO).status_code == 200
+    assert guarded.post("/operation").status_code == 200
     assert deploy(3, "suspend").status_code == 200
-    assert gateway.post(check, json=SCENARIO).status_code == 403
+    assert guarded.post("/operation").status_code == 403
+    assert operations == ["executed", "executed"]
 
 
 def test_operational_history_monitoring_and_adaptive_readiness(tenant):

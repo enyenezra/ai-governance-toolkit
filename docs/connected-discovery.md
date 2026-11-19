@@ -77,7 +77,11 @@ without importing them, sync immediately, and enable or disable scheduled sync.
 A successful preview is required before enabling a new provider configuration.
 Run the existing [scheduled jobs command](release-extensions.md) for each
 organisation using a scoped scheduler key. It reports per-provider failure and
-retains the last successful sync in the workspace.
+retains the last successful sync separately from the latest failed or partial
+attempt. The evidence table distinguishes app inventory, sign-ins and OAuth
+authorisations. **Disconnect** stops local discovery, clears the schedule and
+retains existing findings. Reconnect and preview again before scheduling.
+Revoke consent separately in the provider portal if required.
 
 Each sync reads up to three pages per enabled source. The preview reads one
 page and displays up to twenty apps and twenty devices. Partial coverage is

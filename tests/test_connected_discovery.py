@@ -280,3 +280,31 @@ def test_tenant_discovery_schedule_device_matching_and_passive_signals(monkeypat
     assert editor.put(base + "/schedule", json={"enabled": False}).status_code == 200
     assert not editor.get("/v1/workspace-discovery/connections").json()[0]["scheduled"]
     assert scheduler.post("/v1/workspace-discovery/run").json() == {}
+
+    evidence = editor.get("/v1/workspace-discovery/evidence").json()
+    assert evidence[0]["event_type"] == "application_inventory"
+    assert evidence[0]["finding_id"] in {item["id"] for item in rows}
+    assert outside_api.get("/v1/workspace-discovery/evidence").json() == []
+    assert editor.get("/v1/workspace-discovery/connections").json()[0][
+        "enabled_sources"
+    ] == [
+        "entra-apps",
+        "intune",
+    ]
+    assert editor.put(base + "/connection", json={"enabled": False}).status_code == 200
+    assert editor.post(base + "/preview").status_code == 409
+    assert editor.post(base + "/sync").status_code == 409
+    assert editor.put(base + "/connection", json={"enabled": True}).status_code == 200
+    assert editor.put(base + "/schedule", json={"enabled": True}).status_code == 409
+
+    def rejected(config, pages):
+        from fastapi import HTTPException
+
+        raise HTTPException(502, "Synthetic provider rejection.")
+
+    monkeypatch.setattr(cloud, "discover", rejected)
+    assert editor.post(base + "/sync").status_code == 502
+    connection = editor.get("/v1/workspace-discovery/connections").json()[0]
+    assert connection["last_result"]["sources"] == ["intune", "entra-apps"]
+    assert connection["last_attempt"]["status"] == "failed"
+    assert connection["last_attempt"]["status_code"] == 502

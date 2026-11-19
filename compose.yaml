@@ -14,6 +14,11 @@ services:
       retries: 20
   api:
     build: .
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     environment:
       AIGOVKIT_API_KEY: ${AIGOVKIT_API_KEY:-}
       AIGOVKIT_TENANTS:

@@ -261,3 +261,13 @@ managed-device discovery. Add passive network observations to reconcile devices
 where a reliable identifier exists. See the [connected discovery guide](docs/connected-discovery.md)
 for administrator permissions, scheduled sync, and DHCP, Wi-Fi, switch, NAC,
 DNS and proxy metadata intake.
+
+## Repeatable demo and recovery
+
+Use `bash scripts/demo.sh start` for a separate local Compose project on port
+8001. Run `bash scripts/demo.sh seed` to load synthetic inventory into that demo.
+Seeding replaces matching synthetic IDs. Use `bash scripts/demo.sh stop` to
+stop it and retain the demo volume. The generated `.env.aigovkit-demo` contains
+local credentials and is ignored by Git.
+
+See the [pilot checklist](docs/pilot-checklist.md) and [backup and restore guide](docs/backup-restore.md).

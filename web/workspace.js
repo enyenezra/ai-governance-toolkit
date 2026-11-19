@@ -478,7 +478,13 @@ const load = {
     ]));
   },
   async discovery() {
-    const connections = await request("/workspace-discovery/connections");
+    const [connections, evidence] = await Promise.all([
+      request("/workspace-discovery/connections"), request("/workspace-discovery/evidence"),
+    ]);
+    table("connected-evidence", ["Finding", "Source", "Evidence", "Collected", "Coverage"], evidence.map((item) => [
+      item.name, item.source, item.interpretation, new Date(item.collected_at).toLocaleString(),
+      item.partial ? "Partial" : "Complete within selected sources",
+    ]), "No cloud evidence collected yet.");
     const names = { microsoft365: "Microsoft 365", "google-workspace": "Google Workspace" };
     byId("connected-providers").replaceChildren(...connections.map((connection) => {
       const card = node("section", undefined, "card");
@@ -487,8 +493,13 @@ const load = {
       admin.target = "_blank";
       admin.rel = "noopener noreferrer";
       card.append(node("h2", names[connection.provider]), admin, node("p",
-        connection.configured ? (connection.scheduled ? "Scheduled sync enabled" : "Configured for manual sync")
+        connection.configured ? (connection.disconnected ? "Disconnected" : connection.scheduled ? "Scheduled sync enabled" : "Configured for manual sync")
           : "Administrator authorisation and deployment configuration required."));
+      if (connection.enabled_sources.length) card.append(node("p", "Configured sources: " + connection.enabled_sources.join(", ")));
+      if (connection.last_attempt) {
+        const attempt = connection.last_attempt;
+        card.append(node("p", `Latest attempt ${new Date(attempt.at).toLocaleString()} · ${attempt.status}`));
+      }
       if (connection.last_result) {
         const result = connection.last_result;
         card.append(node("p", `Last successful sync ${new Date(result.synced_at).toLocaleString()} · ${result.new_findings} new findings · ${result.devices_observed} devices${result.partial ? " · Partial coverage" : ""}`));
@@ -503,6 +514,11 @@ const load = {
         }));
         card.append(button, document.createTextNode(" "));
       };
+      action(connection.disconnected ? "Reconnect" : "Disconnect", async () => {
+        await request(base + "/connection", "PUT", { enabled: connection.disconnected });
+        await load.discovery();
+      });
+      if (connection.disconnected) return card;
       action("Preview", async () => {
         const result = await request(base + "/preview", "POST");
         byId("connected-preview").replaceChildren(

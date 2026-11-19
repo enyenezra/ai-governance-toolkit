@@ -17,3 +17,9 @@ Review the [code of conduct](CODE_OF_CONDUCT.md) and [maintainer guide](docs/mai
 Use `node --check web/workspace.js` after changing the workspace script and
 verify the Compose onboarding flow with synthetic inventory. Explicitly test keys
 from a second organisation for changes to shared API or storage code.
+
+The browser smoke suite runs in GitHub Actions against disposable PostgreSQL.
+To run it locally, install the Python development dependencies, run
+`npm ci --prefix tests/browser`, install Chromium with
+`tests/browser/node_modules/.bin/playwright-core install chromium`, and run
+`bash scripts/browser-smoke.sh` with `AIGOVKIT_TEST_DATABASE_URL` set.
