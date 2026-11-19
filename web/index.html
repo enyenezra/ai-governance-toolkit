@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Risk assessment · AI Governance Toolkit</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/assessment.js" defer></script>
+</head>
+<body>
+  <header><span>AI Governance Toolkit</span><a href="/docs">API docs</a></header>
+  <main>
+    <h1>Risk assessment</h1>
+    <p class="intro">Rate an AI use case to see its risk score and whether it needs human review.</p>
+    <div class="layout">
+      <form id="assessment">
+        <div class="ratings">
+          <label>Likelihood
+            <select name="likelihood" required>
+              <option value="">Select a rating</option>
+              <option value="1">1 · Rare</option>
+              <option value="2">2 · Unlikely</option>
+              <option value="3">3 · Possible</option>
+              <option value="4">4 · Likely</option>
+              <option value="5">5 · Almost certain</option>
+            </select>
+          </label>
+          <label>Impact
+            <select name="impact" required>
+              <option value="">Select a rating</option>
+              <option value="1">1 · Negligible</option>
+              <option value="2">2 · Minor</option>
+              <option value="3">3 · Moderate</option>
+              <option value="4">4 · Major</option>
+              <option value="5">5 · Severe</option>
+            </select>
+          </label>
+        </div>
+        <fieldset>
+          <legend>Review triggers</legend>
+          <label class="check"><input type="checkbox" name="uses_personal_data"> Uses personal data</label>
+          <label class="check"><input type="checkbox" name="affects_high_stakes_decisions"> Affects high-stakes decisions</label>
+        </fieldset>
+        <button type="submit">Assess risk</button>
+        <p id="error" role="alert" hidden></p>
+      </form>
+      <section aria-labelledby="result-title">
+        <h2 id="result-title">Assessment result</h2>
+        <div id="result" aria-live="polite">
+          <p id="empty">Your score and review guidance will appear here.</p>
+          <div id="details" hidden>
+            <p id="score"></p>
+            <p id="review"></p>
+            <ul id="reasons"></ul>
+          </div>
+        </div>
+      </section>
+    </div>
+    <p class="note">Scores support initial triage. Apply your organisation’s governance criteria when making decisions.</p>
+  </main>
+</body>
+</html>

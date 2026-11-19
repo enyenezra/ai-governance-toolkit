@@ -1,0 +1,9 @@
+**
+!requirements.txt
+!main.py
+!aigovkit
+!aigovkit/*.py
+!web
+!web/*
+!examples
+!examples/*.json

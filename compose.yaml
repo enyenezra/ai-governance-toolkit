@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: aigovkit
+      POSTGRES_USER: aigovkit
+      POSTGRES_PASSWORD: ${AIGOVKIT_DB_PASSWORD:?Set AIGOVKIT_DB_PASSWORD}
+    volumes:
+      - inventory:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "aigovkit", "-d", "aigovkit"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    environment:
+      AIGOVKIT_API_KEY: ${AIGOVKIT_API_KEY:?Set AIGOVKIT_API_KEY}
+      AIGOVKIT_DATABASE_URL: "host=db dbname=aigovkit user=aigovkit"
+      PGPASSWORD: ${AIGOVKIT_DB_PASSWORD:?Set AIGOVKIT_DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - python -m aigovkit.bootstrap && exec python -m uvicorn main:app --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2).close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:${AIGOVKIT_PORT:-8000}:8000"
+volumes:
+  inventory:

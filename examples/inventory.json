@@ -1,0 +1,9 @@
+[
+  {"kind":"tool","id":"support-ai","name":"Synthetic support assistant"},
+  {"kind":"agent","id":"helper","name":"Ticket summary agent","tool_id":"support-ai"},
+  {"kind":"asset","id":"tickets","name":"Synthetic support tickets","classification":"confidential"},
+  {"kind":"asset","id":"payroll","name":"Synthetic payroll","classification":"restricted"},
+  {"kind":"role_need","id":"support-read","name":"Support ticket summaries","role":"support","scope":{"tool_id":"support-ai","asset_id":"tickets","action":"read"}},
+  {"kind":"connection","id":"ticket-access","name":"Declared ticket permissions","agent_id":"helper","asset_id":"tickets","actions":["read","write"]},
+  {"kind":"connection","id":"payroll-access","name":"Declared payroll permissions","agent_id":"helper","asset_id":"payroll","actions":["read"]}
+]
