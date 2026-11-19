@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased policy review
+
+- Named tenant editor and reviewer keys with independent decisions.
+- Immutable clause revisions, submission and review events in the policy library.
+
 ## Unreleased foundation
 
 - Tenant-scoped reader and editor sessions, organisation profiles and schema isolation.

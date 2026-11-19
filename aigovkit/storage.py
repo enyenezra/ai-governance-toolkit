@@ -27,6 +27,24 @@ CREATE TABLE IF NOT EXISTS foundation_documents (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (kind, id)
 );
+CREATE TABLE IF NOT EXISTS policy_revisions (
+    draft_id text NOT NULL,
+    version integer NOT NULL CHECK (version > 0),
+    author text NOT NULL,
+    body jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (draft_id, version)
+);
+CREATE TABLE IF NOT EXISTS policy_review_events (
+    draft_id text NOT NULL,
+    version integer NOT NULL,
+    action text NOT NULL CHECK (action IN ('submitted', 'approved', 'changes_requested')),
+    actor text NOT NULL,
+    note text,
+    recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (draft_id, version, action),
+    FOREIGN KEY (draft_id, version) REFERENCES policy_revisions (draft_id, version)
+);
 """
 SCHEMA_LOCK_ID = 0x4149474F564B4954
 record_adapter = TypeAdapter(Record)

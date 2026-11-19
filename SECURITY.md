@@ -33,3 +33,7 @@ Reports contain assessment inputs and outputs. Apply your inventory retention
 and backup policies to reports. For the PostgreSQL verifier, use a separate
 read-only login, scope its database access, set TLS verification as appropriate,
 and avoid placing its connection URL in shell history or logs.
+
+Policy review uses distinct named credentials and stable member IDs. Configure
+those IDs for separate individuals and keep a private provisioning record.
+See [policy review](docs/policy-review.md) for separation and audit boundaries.

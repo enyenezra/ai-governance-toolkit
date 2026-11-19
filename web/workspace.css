@@ -33,8 +33,8 @@ p { margin: .45rem 0 .9rem; }
 .metric strong { display: block; color: var(--purple); font-size: 1.6rem; }
 form, #questions { display: grid; gap: .8rem; }
 label { display: grid; font-weight: 600; gap: .25rem; }
-input, select, button { font: inherit; border-radius: .45rem; }
-input, select { min-width: 0; width: 100%; padding: .52rem; border: 1px solid #aaa5ba; color: inherit; background: white; }
+input, select, textarea, button { font: inherit; border-radius: .45rem; }
+input, select, textarea { min-width: 0; width: 100%; padding: .52rem; border: 1px solid #aaa5ba; color: inherit; background: white; }
 button { justify-self: start; border: 0; padding: .53rem .9rem; background: var(--purple); color: white; font-weight: 650; cursor: pointer; }
 button:disabled { opacity: .6; cursor: wait; }
 button.secondary { background: #efe9ff; color: #402098; margin: .15rem 0; }
@@ -57,3 +57,5 @@ ul { padding-left: 1.25rem; }
   nav { grid-template-columns: 1fr 1fr; margin: .6rem 0; }
   header { padding-inline: 1rem; }
 }
+
+textarea { min-height: 5rem; resize: vertical; }

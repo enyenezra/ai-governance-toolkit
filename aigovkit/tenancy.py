@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
-from pydantic import StringConstraints, TypeAdapter, ValidationError
+from pydantic import Field, StringConstraints, TypeAdapter, ValidationError
 
 from aigovkit.models import Identifier, StrictModel
 
@@ -14,16 +14,27 @@ api_key = APIKeyHeader(name="X-API-Key", auto_error=False)
 Key = Annotated[str, StringConstraints(min_length=32, max_length=256)]
 
 
+Role = Literal["reader", "editor", "reviewer"]
+
+
+class MemberKey(StrictModel):
+    id: Identifier
+    role: Role
+    key: Key
+
+
 class TenantKeys(StrictModel):
     id: Identifier
-    editor_key: Key
+    editor_key: Key | None = None
     reader_key: Key | None = None
+    members: list[MemberKey] = Field(default_factory=list, max_length=100)
 
 
 @dataclass(frozen=True)
 class Session:
     tenant: str | None
-    role: Literal["reader", "editor"]
+    role: Role
+    member: str | None = None
 
 
 def configured_tenants() -> list[TenantKeys] | None:
@@ -37,6 +48,12 @@ def configured_tenants() -> list[TenantKeys] | None:
         for key in (tenant.editor_key, tenant.reader_key)
         if key
     ]
+    for tenant in tenants:
+        if not tenant.editor_key and not tenant.members:
+            raise ValueError("Every tenant requires configured credentials.")
+        if len({member.id for member in tenant.members}) != len(tenant.members):
+            raise ValueError("Member IDs must be unique within their tenant.")
+        keys.extend(member.key for member in tenant.members)
     if (
         not tenants
         or len(keys) != len(set(keys))
@@ -67,7 +84,23 @@ def authenticate(
             return Session(None, "editor")
     else:
         for tenant in tenants:
-            if secrets.compare_digest(key, tenant.editor_key.encode()):
+            for member in tenant.members:
+                if secrets.compare_digest(key, member.key.encode()):
+                    if (
+                        request.method not in {"GET", "HEAD"}
+                        and member.role != "editor"
+                    ) and not (
+                        member.role == "reviewer"
+                        and request.method == "POST"
+                        and request.url.path == "/v1/policy-reviews"
+                    ):
+                        raise HTTPException(
+                            403, "This role cannot perform that operation."
+                        )
+                    return Session(tenant.id, member.role, member.id)
+            if tenant.editor_key and secrets.compare_digest(
+                key, tenant.editor_key.encode()
+            ):
                 return Session(tenant.id, "editor")
             if tenant.reader_key and secrets.compare_digest(
                 key, tenant.reader_key.encode()

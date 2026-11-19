@@ -97,7 +97,11 @@ def calculate_readiness(answers: dict[Identifier, Answer]) -> dict:
 
 @router.get("/session")
 def session(actor: Actor) -> dict:
-    return {"organisation_id": actor.tenant, "role": actor.role}
+    return {
+        "organisation_id": actor.tenant,
+        "role": actor.role,
+        **({"member_id": actor.member} if actor.member else {}),
+    }
 
 
 @router.get("/organisation")
@@ -140,7 +144,7 @@ def controls() -> list[dict]:
 
 
 @router.post("/policy-drafts", status_code=201)
-def create_draft(request: DraftInput, store: Store) -> dict:
+def create_draft(request: DraftInput, store: Store, actor: Actor) -> dict:
     template = TEMPLATES.get(request.template_id)
     if template is None:
         raise HTTPException(404, "Policy template not found.")
@@ -166,6 +170,7 @@ def create_draft(request: DraftInput, store: Store) -> dict:
         store,
         "draft",
         {
+            **({"created_by": actor.member} if actor.member else {}),
             "title": title,
             "template_id": request.template_id,
             "template_version": "1.0.0",

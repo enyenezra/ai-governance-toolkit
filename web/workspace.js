@@ -110,6 +110,123 @@ function renderDraft(target, draft) {
   );
 }
 
+async function runPolicyAction(operation) {
+  showNotice();
+  try {
+    await operation();
+  } catch (error) {
+    showNotice(error.message);
+  }
+}
+
+async function openPolicy(draft, selectedVersion) {
+  const base = `/policy-drafts/${draft.id}/revisions`;
+  const versions = await request(base);
+  const latest = versions[0]?.version;
+  const selected = selectedVersion ?? latest;
+  const current = selected ? await request(`${base}/${selected}`) : null;
+  renderDraft("draft-detail", current?.body ?? draft);
+  const target = byId("draft-detail");
+  if (current) {
+    const picker = node("select");
+    for (const { version } of versions) picker.append(new Option(`Revision ${version}`, version));
+    picker.value = selected;
+    picker.addEventListener("change", () => runPolicyAction(() => openPolicy(draft, Number(picker.value))));
+    const label = node("label", "Version history");
+    label.append(picker);
+    target.append(label, node("p", `Review status: ${current.status.replaceAll("_", " ")} · Author: ${current.author}`));
+    if (current.events.length) target.append(list(current.events.map((event) =>
+      `${event.action.replaceAll("_", " ")} · ${event.actor}${event.note ? " · " + event.note : ""}`)));
+  }
+  if (selected !== latest) return;
+  if (!session.member_id) {
+    target.append(node("p", "Use a named editor or reviewer key for policy revisions and decisions."));
+    return;
+  }
+
+  const owned = current?.author === session.member_id;
+  const open = current?.status === "draft";
+  const pending = current?.status === "submitted";
+  if (session.role === "editor" && (!current || (!pending && (!open || owned)))) {
+    const form = node("form");
+    for (const clause of (current?.body ?? draft).clauses) {
+      const label = node("label", clause.id);
+      const field = node("textarea");
+      field.name = clause.id;
+      field.value = clause.text;
+      field.required = true;
+      field.maxLength = 4000;
+      label.append(field);
+      form.append(label);
+    }
+    const save = node("button", "Save new revision");
+    form.append(save);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      runPolicyAction(async () => {
+        try {
+          const clauseTexts = Object.fromEntries(new FormData(form));
+          await request(base, "POST", { expected_version: latest ?? 0, clause_texts: clauseTexts });
+          await openPolicy(draft);
+          showNotice("Revision saved.");
+        } finally {
+          save.disabled = false;
+        }
+      });
+    });
+    target.append(form);
+  }
+  if (session.role === "editor" && owned && open) {
+    const submit = node("button", "Submit revision for review", "secondary");
+    submit.addEventListener("click", () => runPolicyAction(async () => {
+      submit.disabled = true;
+      try {
+        await request(`${base}/${selected}/submit`, "POST");
+        await openPolicy(draft);
+        showNotice("Revision submitted.");
+      } finally {
+        submit.disabled = false;
+      }
+    }));
+    target.append(submit);
+  }
+  if (session.role === "reviewer" && pending && !owned && draft.created_by !== session.member_id) {
+    const form = node("form");
+    const label = node("label", "Decision rationale");
+    const note = node("textarea");
+    note.required = true;
+    note.maxLength = 4000;
+    label.append(note);
+    form.append(label);
+    const actions = [["approved", "Approve revision"], ["changes_requested", "Request changes"]];
+    for (const [action, title] of actions) {
+      const button = node("button", title);
+      button.name = "decision";
+      button.value = action;
+      form.append(button);
+    }
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const button = event.submitter;
+      if (!button) return;
+      for (const action of form.querySelectorAll("button")) action.disabled = true;
+      runPolicyAction(async () => {
+        try {
+          await request("/policy-reviews", "POST", {
+            draft_id: draft.id, version: selected, action: button.value, note: note.value,
+          });
+          await openPolicy(draft);
+          showNotice("Review decision recorded.");
+        } finally {
+          for (const action of form.querySelectorAll("button")) action.disabled = false;
+        }
+      });
+    });
+    target.append(form);
+  }
+}
+
 function renderInventory() {
   const term = byId("search").value.toLowerCase().trim();
   const rows = inventory.filter((item) => [item.id, item.name, item.owner].some(
@@ -194,8 +311,10 @@ const load = {
     const buttons = drafts.map((draft) => {
       const button = node("button", draft.title, "secondary");
       button.type = "button";
-      button.addEventListener("click", () => renderDraft("draft-detail", draft));
-      return node("p").appendChild(button).parentElement;
+      button.addEventListener("click", () => runPolicyAction(() => openPolicy(draft)));
+      const entry = node("p");
+      entry.append(button);
+      return entry;
     });
     byId("drafts").replaceChildren(...(buttons.length ? buttons : [node("p", "No saved drafts yet.")]));
   },

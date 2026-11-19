@@ -25,8 +25,9 @@ of 12 saved policy drafts and review its clauses and proposed controls in the
 policy library. The dashboard uses saved assessments and registered inventory.
 The original scoring demo remains available at `/`.
 
-Policy drafts require review. Publication, employee acknowledgements, evidence
-workflows, and enforcement are planned. See the
+Named editors and independent reviewers can revise, submit and review drafts.
+See the [policy review guide](docs/policy-review.md). Publication, employee
+acknowledgements and enforcement are planned. See the
 [foundation plan](docs/foundation-plan.md) for the baseline audit, security
 model and release roadmap.
 
@@ -162,7 +163,7 @@ reads PostgreSQL metadata and makes no changes. See the
 | Risk scoring and reporting | Versioned JSON findings, controls and saved reports. Scores are 25 for low, 50 for medium, and 100 for high |
 | Developer integrations | REST and OpenAPI, synthetic examples, and a documented read-only connector contract. Other providers are unimplemented |
 | Open-source infrastructure | Docker Compose, PostgreSQL integration tests, CI, MIT licence, contribution and security docs, and issue templates |
-| Identity, approvals and audit | Tenant-scoped reader and editor API keys. Reports capture past recommendations. Per-user identity, formal approvals and immutable audit logging are planned |
+| Identity, approvals and audit | Tenant-scoped shared keys and named editor and reviewer keys. Policy decisions record an actor and rationale. OIDC and cross-module audit logging are planned |
 | Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator and library, and proposed control catalogue |
 
 ## Run multiple organisations

@@ -8,10 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from aigovkit.api import router
 from aigovkit.foundation import router as foundation_router
+from aigovkit.policy_review import router as review_router
 
 app = FastAPI(title="AI Governance Toolkit", version="0.1.0")
 app.include_router(router)
 app.include_router(foundation_router)
+app.include_router(review_router)
 
 
 @app.middleware("http")
