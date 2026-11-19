@@ -477,6 +477,53 @@ const load = {
       member.member_id, member.role, member.state, member.groups.join(", "), member.version,
     ]));
   },
+  async discovery() {
+    const connections = await request("/workspace-discovery/connections");
+    const names = { microsoft365: "Microsoft 365", "google-workspace": "Google Workspace" };
+    byId("connected-providers").replaceChildren(...connections.map((connection) => {
+      const card = node("section", undefined, "card");
+      const admin = node("a", "Open administrator portal");
+      admin.href = connection.admin_portal;
+      admin.target = "_blank";
+      admin.rel = "noopener noreferrer";
+      card.append(node("h2", names[connection.provider]), admin, node("p",
+        connection.configured ? (connection.scheduled ? "Scheduled sync enabled" : "Configured for manual sync")
+          : "Administrator authorisation and deployment configuration required."));
+      if (connection.last_result) {
+        const result = connection.last_result;
+        card.append(node("p", `Last successful sync ${new Date(result.synced_at).toLocaleString()} · ${result.new_findings} new findings · ${result.devices_observed} devices${result.partial ? " · Partial coverage" : ""}`));
+      }
+      if (session.role !== "editor" || !session.member_id || !connection.configured) return card;
+      const base = "/workspace-discovery/" + connection.provider;
+      const action = (title, operation) => {
+        const button = node("button", title, "secondary");
+        button.addEventListener("click", () => runPolicyAction(async () => {
+          button.disabled = true;
+          try { await operation(); } finally { button.disabled = false; }
+        }));
+        card.append(button, document.createTextNode(" "));
+      };
+      action("Preview", async () => {
+        const result = await request(base + "/preview", "POST");
+        byId("connected-preview").replaceChildren(
+          node("p", `Sources: ${result.sources.join(", ")} · ${result.partial ? "Partial coverage" : "Provider page complete"}`),
+          list([...result.applications.map((item) => `${item.name} · ${item.source}`),
+            ...result.devices.map((item) => `${item.name} · ${item.source}`)]),
+        );
+      });
+      action("Sync now", async () => {
+        const result = await request(base + "/sync", "POST");
+        await load.discovery();
+        showNotice(`Discovered ${result.new_findings} new review items and observed ${result.devices_observed} devices.`);
+      });
+      action(connection.scheduled ? "Disable scheduled sync" : "Enable scheduled sync", async () => {
+        await request(base + "/schedule", "PUT", { enabled: !connection.scheduled });
+        await load.discovery();
+      });
+      return card;
+    }));
+  },
+  devices: () => loadDevices(0),
   async training() {
     const courses = await request("/training/courses");
     byId("training-completion").hidden = !session.member_id;
@@ -701,3 +748,17 @@ onSubmit("training-form", async ({ id }) => {
   await request(`/training/assignments/${encodeURIComponent(id)}/complete`, "POST");
   showNotice("Course completion recorded.");
 });
+
+async function loadDevices(offset) {
+  const devices = await request(`/devices?offset=${offset}&limit=50`);
+  table("device-table", ["Device", "Status", "Sources", "Last seen", "Correlation"], devices.map((item) => [
+    Object.values(item.sources).find((source) => source.name)?.name || item.id.slice(0, 12),
+    item.managed ? (item.network_seen ? "Managed · seen on network" : "Managed source") : "Network only",
+    Object.keys(item.sources).join(", "), new Date(item.last_seen).toLocaleString(),
+    item.match === "exact_mac" ? "Exact MAC" : "Source only",
+  ]), "No devices observed.");
+  byId("device-newer").hidden = offset === 0;
+  byId("device-older").hidden = devices.length < 50;
+  byId("device-newer").onclick = () => runPolicyAction(() => loadDevices(Math.max(0, offset - 50)));
+  byId("device-older").onclick = () => runPolicyAction(() => loadDevices(offset + 50));
+}

@@ -253,3 +253,11 @@ trends, scheduled reviews and incident intake, training, managed Entra group
 sync, policy-linked gate rules, external ASGI enforcement, signed audit
 exports and audit retention. Provider rollout and telemetry coverage depend
 on the deployment.
+
+## Cloud and network discovery
+
+Connect Microsoft 365 / Entra and Google Workspace for read-only application and
+managed-device discovery. Add passive network observations to reconcile devices
+where a reliable identifier exists. See the [connected discovery guide](docs/connected-discovery.md)
+for administrator permissions, scheduled sync, and DHCP, Wi-Fi, switch, NAC,
+DNS and proxy metadata intake.

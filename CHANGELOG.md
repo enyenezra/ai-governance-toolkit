@@ -36,3 +36,9 @@
 - Added executive trend filters, policy reminders, incident intake and training courses.
 - Added policy-linked rule bundles, fail-closed ASGI enforcement and Entra group sync.
 - Added signed audit pages, offline verification and operator-gated audit retention.
+
+## Unreleased connected discovery
+
+- Added Microsoft 365 and Google Workspace app and managed-device discovery.
+- Added passive network device reconciliation and approved DNS or proxy signals.
+- Added provider previews, scheduled sync, and Connected discovery and Devices views.

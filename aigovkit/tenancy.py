@@ -94,9 +94,14 @@ def schema_for(tenant: str) -> str:
 
 def authorize_member(request: Request, session: Session) -> Session:
     if session.role == "observer":
-        if request.method != "PUT" or not request.url.path.startswith(
+        register_write = request.method == "PUT" and request.url.path.startswith(
             ("/v1/registers/signal/", "/v1/registers/discovery/")
-        ):
+        )
+        device_write = request.method == "POST" and request.url.path in {
+            "/v1/device-observations",
+            "/v1/device-domain-signals",
+        }
+        if not (register_write or device_write):
             raise HTTPException(
                 403, "Observer credentials can submit monitoring evidence only."
             )
@@ -105,6 +110,7 @@ def authorize_member(request: Request, session: Session) -> Session:
         if request.method != "POST" or request.url.path not in {
             "/v1/review-reminders/run",
             "/v1/incident-alerts/run",
+            "/v1/workspace-discovery/run",
         }:
             raise HTTPException(
                 403, "Scheduler credentials can only run scheduled jobs."

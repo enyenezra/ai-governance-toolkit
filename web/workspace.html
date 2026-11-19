@@ -21,6 +21,8 @@
       <a href="#published">Published policies</a>
       <a href="#controls">Control catalogue</a>
       <a href="#operations">Governance registers</a>
+      <a href="#discovery">Connected discovery</a>
+      <a href="#devices">Devices</a>
       <a href="#training">Training courses</a>
       <a href="#access">Access requests</a>
       <a href="#guardrails">Runtime guardrails</a>
@@ -233,6 +235,20 @@
               </form>
             </section>
           </div>
+        </section>
+        <section id="discovery" class="page" hidden>
+          <h1>Connected discovery</h1>
+          <p class="subtitle">Authorise the provider, preview read-only results, then enable scheduled sync.</p>
+          <div id="connected-providers" class="split"></div>
+          <section class="card"><h2>Discovery preview</h2><div id="connected-preview"><p>Select a provider to preview its findings.</p></div></section>
+        </section>
+        <section id="devices" class="page" hidden>
+          <h1>Device inventory</h1>
+          <p class="subtitle">Managed inventory and passive network observations. Source-only records may refer to the same device.</p>
+          <section class="card"><div id="device-table"></div>
+            <button type="button" id="device-newer" class="secondary" hidden>Previous page</button>
+            <button type="button" id="device-older" class="secondary" hidden>Next page</button>
+          </section>
         </section>
         <section id="training" class="page" hidden>
           <h1>Training courses</h1>
