@@ -52,7 +52,8 @@ def revision(cursor, draft_id: str, version: int | None = None) -> dict | None:
             (SELECT e.action FROM policy_review_events e
              WHERE e.draft_id = r.draft_id AND e.version = r.version
              ORDER BY (e.action = 'submitted'), e.recorded_at DESC LIMIT 1), 'draft'
-        ) AS status
+        ) AS status, (SELECT p.published_at FROM policy_publications p
+           WHERE p.draft_id = r.draft_id AND p.version = r.version) AS published_at
         FROM policy_revisions r WHERE r.draft_id = %s
     """
     if version is not None:

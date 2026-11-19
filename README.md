@@ -26,8 +26,9 @@ policy library. The dashboard uses saved assessments and registered inventory.
 The original scoring demo remains available at `/`.
 
 Named editors and independent reviewers can revise, submit and review drafts.
-See the [policy review guide](docs/policy-review.md). Publication, employee
-acknowledgements and enforcement are planned. See the
+A separate publisher can publish an approved revision inside the organisation.
+Named members can acknowledge a specific published version. See the
+[policy review](docs/policy-review.md) and [publication](docs/policy-publication.md) guides. See the
 [foundation plan](docs/foundation-plan.md) for the baseline audit, security
 model and release roadmap.
 

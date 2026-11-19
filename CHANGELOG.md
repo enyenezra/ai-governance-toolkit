@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased policy publication
+
+- Added an independent publisher role and a version-specific published policy view.
+- Added named-member acknowledgement receipts tied to the exact publication.
+
 ## Unreleased policy review
 
 - Named tenant editor and reviewer keys with independent decisions.

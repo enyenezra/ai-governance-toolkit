@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS policy_review_events (
     PRIMARY KEY (draft_id, version, action),
     FOREIGN KEY (draft_id, version) REFERENCES policy_revisions (draft_id, version)
 );
+CREATE TABLE IF NOT EXISTS policy_publications (
+    draft_id text NOT NULL,
+    version integer NOT NULL,
+    publisher text NOT NULL,
+    published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (draft_id, version),
+    FOREIGN KEY (draft_id, version) REFERENCES policy_revisions (draft_id, version)
+);
+CREATE TABLE IF NOT EXISTS policy_acknowledgements (
+    draft_id text NOT NULL,
+    version integer NOT NULL,
+    member_id text NOT NULL,
+    acknowledged_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (draft_id, version, member_id),
+    FOREIGN KEY (draft_id, version) REFERENCES policy_publications (draft_id, version)
+);
 """
 SCHEMA_LOCK_ID = 0x4149474F564B4954
 record_adapter = TypeAdapter(Record)

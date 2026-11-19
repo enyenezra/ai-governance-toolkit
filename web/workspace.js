@@ -100,13 +100,13 @@ function renderReadiness(result) {
     : [node("p", "No readiness assessments yet.")]));
 }
 
-function renderDraft(target, draft) {
+function renderDraft(target, draft, published = false) {
   byId(target).replaceChildren(
     node("h3", draft.title),
-    node("p", `Draft · ${draft.organisation.name} · Owner: ${draft.owner}`),
+    node("p", `${published ? "Published" : "Draft"} · ${draft.organisation.name} · Owner: ${draft.owner}`),
     node("p", `Scope: ${draft.scope} · Review every ${draft.review_days} days`),
     list(draft.clauses.map((clause) => `${clause.text} [${clause.control_id}]`)),
-    node("p", "Requires human review before use."),
+    ...(!published ? [node("p", "Requires human review before use.")] : []),
   );
 }
 
@@ -191,6 +191,24 @@ async function openPolicy(draft, selectedVersion) {
     }));
     target.append(submit);
   }
+  if (current?.published_at) target.append(node("p", "This revision has been published."));
+  if (session.role === "publisher" && current?.status === "approved" && !current.published_at
+      && !owned && draft.created_by !== session.member_id
+      && !current.events.some((event) => event.action === "approved" && event.actor === session.member_id)) {
+    const publish = node("button", "Publish approved revision", "secondary");
+    publish.addEventListener("click", () => runPolicyAction(async () => {
+      publish.disabled = true;
+      try {
+        await request("/policy-publications", "POST", { draft_id: draft.id, version: selected });
+        await openPolicy(draft);
+        showNotice("Policy published for this organisation.");
+      } finally {
+        publish.disabled = false;
+      }
+    }));
+    target.append(publish);
+  }
+
   if (session.role === "reviewer" && pending && !owned && draft.created_by !== session.member_id) {
     const form = node("form");
     const label = node("label", "Decision rationale");
@@ -224,6 +242,28 @@ async function openPolicy(draft, selectedVersion) {
       });
     });
     target.append(form);
+  }
+}
+
+async function openPublishedPolicy(draftId, version) {
+  const policy = await request(`/published-policies/${draftId}/${version}`);
+  renderDraft("published-detail", policy.body, true);
+  const target = byId("published-detail");
+  target.append(node("p", `Revision ${policy.version} · Published by ${policy.publisher}`));
+  if (policy.acknowledged_at) {
+    target.append(node("p", "You acknowledged this version."));
+  } else if (policy.current && session.member_id) {
+    const button = node("button", "Acknowledge this version");
+    button.addEventListener("click", () => runPolicyAction(async () => {
+      button.disabled = true;
+      try {
+        await request("/policy-acknowledgements", "POST", { draft_id: draftId, version });
+        await openPublishedPolicy(draftId, version);
+      } finally {
+        button.disabled = false;
+      }
+    }));
+    target.append(button);
   }
 }
 
@@ -317,6 +357,18 @@ const load = {
       return entry;
     });
     byId("drafts").replaceChildren(...(buttons.length ? buttons : [node("p", "No saved drafts yet.")]));
+  },
+  async published() {
+    const policies = await request("/published-policies");
+    const entries = policies.map((policy) => {
+      const entry = node("p");
+      const button = node("button", policy.title, "secondary");
+      button.type = "button";
+      button.addEventListener("click", () => runPolicyAction(() => openPublishedPolicy(policy.draft_id, policy.version)));
+      entry.append(button);
+      return entry;
+    });
+    byId("published-list").replaceChildren(...(entries.length ? entries : [node("p", "No published policies yet.")]));
   },
   async controls() {
     const controls = await request("/controls");

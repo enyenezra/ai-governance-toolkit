@@ -14,7 +14,7 @@ api_key = APIKeyHeader(name="X-API-Key", auto_error=False)
 Key = Annotated[str, StringConstraints(min_length=32, max_length=256)]
 
 
-Role = Literal["reader", "editor", "reviewer"]
+Role = Literal["reader", "editor", "reviewer", "publisher"]
 
 
 class MemberKey(StrictModel):
@@ -86,13 +86,21 @@ def authenticate(
         for tenant in tenants:
             for member in tenant.members:
                 if secrets.compare_digest(key, member.key.encode()):
+                    permitted_post = request.method == "POST" and (
+                        request.url.path == "/v1/policy-acknowledgements"
+                        or (
+                            member.role == "reviewer"
+                            and request.url.path == "/v1/policy-reviews"
+                        )
+                        or (
+                            member.role == "publisher"
+                            and request.url.path == "/v1/policy-publications"
+                        )
+                    )
                     if (
                         request.method not in {"GET", "HEAD"}
                         and member.role != "editor"
-                    ) and not (
-                        member.role == "reviewer"
-                        and request.method == "POST"
-                        and request.url.path == "/v1/policy-reviews"
+                        and not permitted_post
                     ):
                         raise HTTPException(
                             403, "This role cannot perform that operation."

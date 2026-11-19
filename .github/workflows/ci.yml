@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, release/foundation, feature/policy-review]
+    branches: [main, release/foundation, feature/**]
   pull_request:
-    branches: [main, release/foundation]
+    branches: [main, release/foundation, feature/**]
 
 permissions:
   contents: read
