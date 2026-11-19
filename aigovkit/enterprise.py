@@ -86,6 +86,7 @@ class Training(StrictModel):
     due_date: Day
     status: Literal["assigned", "completed"]
     evidence_reference: Text | None = None
+    course_id: Identifier | None = None
 
 
 class Discovery(StrictModel):

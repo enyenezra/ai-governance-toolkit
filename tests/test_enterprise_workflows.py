@@ -30,7 +30,14 @@ def tenant(monkeypatch):
     tenant_id = f"test-{secrets.token_hex(8)}"
     members = [
         {"id": role, "role": role, "key": secrets.token_urlsafe(32)}
-        for role in ("editor", "publisher", "gateway", "identity_admin", "reviewer")
+        for role in (
+            "editor",
+            "publisher",
+            "gateway",
+            "identity_admin",
+            "reviewer",
+            "auditor",
+        )
     ]
     monkeypatch.setenv(
         "AIGOVKIT_TENANTS", json.dumps([{"id": tenant_id, "members": members}])
@@ -238,3 +245,105 @@ def test_directory_join_move_leave_and_access_queue(tenant, monkeypatch):
         == 200
     )
     assert requester.get("/v1/session").status_code == 403
+
+
+def test_executive_trends_signed_export_and_scheduled_alerts(
+    tenant, monkeypatch, tmp_path
+):
+    from datetime import UTC, datetime
+
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from aigovkit.verify_audit import verify
+
+    editor, auditor = tenant["editor"], tenant["auditor"]
+    assert editor.post("/v1/reports", json=SCENARIO).status_code == 201
+    path = "/v1/executive-report"
+    trend = editor.get(
+        path, params={"department": "customer-support", "system": "support-ai"}
+    ).json()
+    assert trend["report_count"] == 1
+    assert (
+        editor.get(path, params={"department": "unknown"}).json()["report_count"] == 0
+    )
+    assert editor.get(path, params={"risk": "high"}).json()["report_count"] == 0
+    day = datetime.now(UTC).date().isoformat()
+    event = {
+        "kind": "signal",
+        "title": "Runtime failure",
+        "source": "fixture",
+        "agent_id": "helper",
+        "event": "error",
+        "count": 10,
+        "observed_on": day,
+    }
+    assert editor.put("/v1/registers/signal/first", json=event).status_code == 200
+    assert editor.post("/v1/incident-alerts/run").json() == {"created": 1}
+    assert editor.post("/v1/incident-alerts/run").json() == {"created": 0}
+    assert editor.get("/v1/registers/incident").json()[0]["system_id"] == "helper"
+    assert editor.post("/v1/review-reminders/run").json() == {"queued": 0}
+    course = {
+        "kind": "training",
+        "title": "Training fixture",
+        "assignee": "publisher",
+        "due_date": "2027-01-01",
+        "status": "assigned",
+        "course_id": "secure-ai-basics",
+    }
+    assert editor.put("/v1/registers/training/t1", json=course).status_code == 200
+    complete = "/v1/training/assignments/t1/complete"
+    assert editor.post(complete).status_code == 404
+    assert tenant["publisher"].post(complete).json()["status"] == "completed"
+    assert len(editor.get("/v1/training/courses").json()) == 2
+    key = Ed25519PrivateKey.generate()
+    path = tmp_path / "private.pem"
+    path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setenv("AIGOVKIT_AUDIT_SIGNING_KEY_FILE", str(path))
+    assert editor.get("/v1/audit-export").status_code == 403
+    exported = auditor.get("/v1/audit-export").json()
+    verify(exported, key.public_key())
+    exported["payload"]["events"].clear()
+    with pytest.raises(InvalidSignature):
+        verify(exported, key.public_key())
+    assert not auditor.post("/v1/retention/audit", json={"days": 30}).json()["applied"]
+    assert (
+        auditor.post(
+            "/v1/retention/audit", json={"days": 30, "apply": True}
+        ).status_code
+        == 403
+    )
+
+
+def test_reviewed_discovery_promotion_is_idempotent(tenant):
+    editor = tenant["editor"]
+    path = "/v1/registers/discovery/item"
+    promotion = "/v1/discovery/item/promote"
+    evidence = {
+        "kind": "discovery",
+        "title": "Example",
+        "source": "entra",
+        "service": "Discovered tool",
+        "count": 1,
+        "status": "needs_review",
+        "observed_on": "2026-11-19",
+    }
+    assert editor.put(path, json=evidence).status_code == 200
+    assert editor.post(promotion, json={"owner": "security"}).status_code == 409
+    assert (
+        editor.put(
+            path + "?expected_version=1", json=evidence | {"status": "approved"}
+        ).status_code
+        == 200
+    )
+    created = editor.post(promotion, json={"owner": "security"})
+    assert created.status_code == 201
+    assert created.json()["name"] == "Discovered tool"
+    assert editor.post(promotion, json={"owner": "security"}).status_code == 409

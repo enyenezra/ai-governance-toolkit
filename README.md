@@ -245,3 +245,11 @@ schedules, acknowledgement coverage, runtime gate deployment, provider
 discovery, the risk register and operational monitoring. Provider connectors
 are read-only. Live provider access, external enforcement and telemetry
 coverage depend on deployment configuration.
+
+## Reporting and operations extensions
+
+See the [extensions guide](docs/release-extensions.md) for filtered executive
+trends, scheduled reviews and incident intake, training, managed Entra group
+sync, policy-linked gate rules, external ASGI enforcement, signed audit
+exports and audit retention. Provider rollout and telemetry coverage depend
+on the deployment.

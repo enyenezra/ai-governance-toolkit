@@ -71,7 +71,7 @@ def https_endpoint(key: str) -> str:
     return value.rstrip("/")
 
 
-def list_mcp(client, url: str) -> tuple[list[dict], bool]:
+def list_mcp(client, url: str, pages: int = 1) -> tuple[list[dict], bool]:
     headers = {"Accept": "application/json, text/event-stream"}
 
     def rpc(method: str, params=None, request_id=None):
@@ -105,24 +105,63 @@ def list_mcp(client, url: str) -> tuple[list[dict], bool]:
     if session := initial_headers.get("Mcp-Session-Id"):
         headers["Mcp-Session-Id"] = session
     rpc("notifications/initialized")
-    result, _ = rpc("tools/list", request_id=2)
-    return result["tools"], bool(result.get("nextCursor"))
+    tools = []
+    cursor = None
+    for index in range(pages):
+        result, _ = rpc("tools/list", {"cursor": cursor} if cursor else None, index + 2)
+        tools.extend(result["tools"])
+        cursor = result.get("nextCursor")
+        if not cursor:
+            break
+    return tools, bool(cursor)
 
 
-def discover(provider: Provider, client: httpx.Client) -> dict:
+def linked_pages(client, url: str, params: dict, next_key: str, pages: int):
+    origin = urlsplit(url)
+    items = []
+    next_url = url
+    for index in range(pages):
+        result, _ = read_only_http(
+            client, "GET", next_url, params=params if index == 0 else None
+        )
+        items.extend(result["value"])
+        next_url = result.get(next_key)
+        if not next_url:
+            break
+        if index + 1 == pages:
+            break
+        target = urlsplit(next_url)
+        if (target.scheme, target.netloc, target.path) != (
+            origin.scheme,
+            origin.netloc,
+            origin.path,
+        ):
+            raise ValueError("Unexpected provider pagination URL.")
+    return items, bool(next_url)
+
+
+def discover(provider: Provider, client: httpx.Client, pages: int = 1) -> dict:
+    if not 1 <= pages <= 25:
+        raise ValueError("Discovery requires 1–25 pages.")
     if provider == "aws-iam":
-        result = boto3.client("iam").list_roles(MaxItems=100)
-        records = [
-            {"id": role["RoleId"], "name": role["RoleName"], "type": "iam_role"}
-            for role in result["Roles"]
-        ]
-        return {
-            "provider": provider,
-            "records": records,
-            "partial": result["IsTruncated"],
-        }
+        iam = boto3.client("iam")
+        records = []
+        marker = None
+        partial = False
+        for _ in range(pages):
+            cursor = {"Marker": marker} if marker else {}
+            result = iam.list_roles(MaxItems=100, **cursor)
+            records.extend(
+                {"id": role["RoleId"], "name": role["RoleName"], "type": "iam_role"}
+                for role in result["Roles"]
+            )
+            partial = result["IsTruncated"]
+            marker = result.get("Marker")
+            if not partial or not marker:
+                break
+        return {"provider": provider, "records": records, "partial": partial}
     if provider == "mcp":
-        items, partial = list_mcp(client, https_endpoint("AIGOVKIT_MCP_URL"))
+        items, partial = list_mcp(client, https_endpoint("AIGOVKIT_MCP_URL"), pages)
         records = [
             {"id": row["name"], "name": row["name"], "type": "mcp_tool"}
             for row in items
@@ -134,13 +173,13 @@ def discover(provider: Provider, client: httpx.Client) -> dict:
             if provider == "entra"
             else ("subscribedSkus", "id,skuPartNumber")
         )
-        result, _ = read_only_http(
+        items, partial = linked_pages(
             client,
-            "GET",
             f"https://graph.microsoft.com/v1.0/{path}",
-            params={"$select": select},
+            {"$select": select},
+            "@odata.nextLink",
+            pages,
         )
-        items, partial = result["value"], bool(result.get("@odata.nextLink"))
         records = [
             {
                 "id": row["id"],
@@ -151,30 +190,38 @@ def discover(provider: Provider, client: httpx.Client) -> dict:
         ]
     elif provider == "azure":
         subscription = str(UUID(os.environ["AIGOVKIT_AZURE_SUBSCRIPTION"]))
-        result, _ = read_only_http(
+        items, partial = linked_pages(
             client,
-            "GET",
             f"https://management.azure.com/subscriptions/{quote(subscription)}/resources",
-            params={"api-version": "2021-04-01", "$top": 100},
+            {"api-version": "2021-04-01", "$top": 100},
+            "nextLink",
+            pages,
         )
-        partial = bool(result.get("nextLink"))
         records = [
-            {"id": row["id"], "name": row["name"], "type": row["type"]}
-            for row in result["value"]
+            {"id": row["id"], "name": row["name"], "type": row["type"]} for row in items
         ]
     elif provider == "purview":
-        result, _ = read_only_http(
-            client,
-            "POST",
-            https_endpoint("AIGOVKIT_PURVIEW_URL") + "/datamap/api/search/query",
-            params={"api-version": "2023-09-01"},
-            json={"keywords": "*", "limit": 100},
-        )
-        partial = bool(result.get("continuationToken"))
-        records = [
-            {"id": row["id"], "name": row["name"], "type": row["entityType"]}
-            for row in result["value"]
-        ]
+        records = []
+        continuation = None
+        for _ in range(pages):
+            body = {"keywords": "*", "limit": 100}
+            if continuation:
+                body["continuationToken"] = continuation
+            result, _ = read_only_http(
+                client,
+                "POST",
+                https_endpoint("AIGOVKIT_PURVIEW_URL") + "/datamap/api/search/query",
+                params={"api-version": "2023-09-01"},
+                json=body,
+            )
+            records.extend(
+                {"id": row["id"], "name": row["name"], "type": row["entityType"]}
+                for row in result["value"]
+            )
+            continuation = result.get("continuationToken")
+            if not continuation:
+                break
+        partial = bool(continuation)
     elif provider == "ai-gateway":
         result, _ = read_only_http(
             client, "GET", https_endpoint("AIGOVKIT_GATEWAY_MODELS_URL")
@@ -188,8 +235,8 @@ def discover(provider: Provider, client: httpx.Client) -> dict:
         raise ValueError("Unknown provider.")
     return {
         "provider": provider,
-        "records": records[:100],
-        "partial": partial or len(records) > 100,
+        "records": records[: 100 * pages],
+        "partial": partial or len(records) > 100 * pages,
     }
 
 
@@ -239,6 +286,7 @@ def main():
         action="store_true",
         help="Submit observations to your AIGovKit workspace.",
     )
+    parser.add_argument("--pages", type=int, default=1)
     args = parser.parse_args()
     token = os.getenv("AIGOVKIT_CONNECTOR_TOKEN")
     if args.provider not in {"aws-iam", "mcp"} and not token:
@@ -248,7 +296,7 @@ def main():
         with httpx.Client(
             headers=headers, timeout=8, follow_redirects=False, trust_env=False
         ) as client:
-            report = discover(args.provider, client)
+            report = discover(args.provider, client, args.pages)
         if args.submit:
             # The provider bearer credential is never sent to the governance service.
             with httpx.Client(

@@ -30,6 +30,22 @@ EXTRA = {
         "Have you assessed data flows involving sensitive or regulated information?",
         "Map sensitive data flows and obtain a qualified governance review.",
     ),
+    "identity_lifecycle": (
+        "Do joiners, movers and leavers trigger an AI access review?",
+        "Test group changes and suspension against AI access recommendations.",
+    ),
+    "data_lifecycle": (
+        "Do AI data flows have approved retention and deletion rules?",
+        "Assign retention and deletion owners and verify the controls.",
+    ),
+    "evidence": (
+        "Can reviewers trace governance decisions to reliable evidence?",
+        "Collect dated approval and verification evidence.",
+    ),
+    "vendor_exit": (
+        "Can you exit AI providers and verify data return or deletion?",
+        "Document supplier exit and deletion requirements.",
+    ),
 }
 REFERENCES = [
     (
@@ -100,27 +116,27 @@ REFERENCES = [
 
 
 class AdaptiveInput(StrictModel):
-    answers: dict[Identifier, Answer] = Field(min_length=1, max_length=12)
+    answers: dict[Identifier, Answer] = Field(min_length=1, max_length=16)
 
 
 def adaptive_questions(store: Store, sensitive: bool) -> dict:
     profile = database_call(store.get_document, "profile", "default")
     if profile is None:
         raise HTTPException(409, "Complete organisation onboarding first.")
-    additions = []
+    additions = ["identity_lifecycle", "evidence"]
     if profile["adoption_stage"] in {"piloting", "operating"}:
         additions.append("development")
     if profile["adoption_stage"] == "operating":
-        additions.append("monitoring")
+        additions.extend(("monitoring", "vendor_exit"))
     if sensitive:
-        additions.append("sensitive_data")
+        additions.extend(("sensitive_data", "data_lifecycle"))
     return {**QUESTIONS, **{key: EXTRA[key][0] for key in additions}}
 
 
 @router.get("/readiness/adaptive")
 def adaptive(store: Store, handles_sensitive_data: bool = False) -> dict:
     return {
-        "version": "2.0.0",
+        "version": "2.1.0",
         "questions": adaptive_questions(store, handles_sensitive_data),
     }
 
@@ -148,7 +164,7 @@ def assess(
         store,
         "adaptive_readiness",
         {
-            "scoring_version": "2.0.0",
+            "scoring_version": "2.1.0",
             "score": score,
             "gaps": gaps,
             "answers": request.answers,

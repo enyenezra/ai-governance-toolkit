@@ -325,6 +325,7 @@ function renderInventory() {
 
 const load = {
   async overview() {
+    await loadTrend();
     const [profile, tools, agents, reports, adaptive, legacy] = await Promise.all([
       request("/organisation"), request("/inventory?kind=tool&limit=100"),
       request("/inventory?kind=agent&limit=100"), request("/reports?limit=10"),
@@ -409,12 +410,13 @@ const load = {
     byId("drafts").replaceChildren(...(buttons.length ? buttons : [node("p", "No saved drafts yet.")]));
   },
   async published() {
-    const [policies, schedule] = await Promise.all([
-      request("/published-policies"), request("/policy-review-schedule"),
+    const [policies, schedule, reminders] = await Promise.all([
+      request("/published-policies"), request("/policy-review-schedule"), request("/review-reminders"),
     ]);
     table("review-schedule", ["Policy", "Due date", "Status"], schedule.map((policy) => [
       policy.title, policy.due_date, policy.due ? "Due" : "Scheduled",
     ]), "No reviews scheduled.");
+    table("policy-reminders", ["Policy", "Revision", "Due date"], reminders.map((item) => [item.title, item.version, item.due_date]), "No queued reminders.");
     const entries = policies.map((policy) => {
       const entry = node("p");
       const button = node("button", policy.title, "secondary");
@@ -474,6 +476,15 @@ const load = {
     table("managed-members", ["Member", "Role", "Status", "Groups", "Version"], members.map((member) => [
       member.member_id, member.role, member.state, member.groups.join(", "), member.version,
     ]));
+  },
+  async training() {
+    const courses = await request("/training/courses");
+    byId("training-completion").hidden = !session.member_id;
+    byId("course-list").replaceChildren(...courses.map((course) => {
+      const section = node("section", undefined, "card");
+      section.append(node("h2", course.title), node("p", `Version ${course.version}`), list(course.lessons));
+      return section;
+    }));
   },
   audit: () => loadAudit(),
   async controls() {
@@ -675,4 +686,18 @@ onSubmit("member-form", async ({ id, subject, role, state, groups, version }) =>
   });
   await load.directory();
   showNotice("Member saved.");
+});
+
+async function loadTrend() {
+  const data = new FormData(byId("trend-form"));
+  const filters = new URLSearchParams([...data].filter(([, value]) => value));
+  const report = await request("/executive-report?" + filters);
+  byId("trend-count").textContent = `${report.report_count} saved assessments match.`;
+  table("trend-table", ["Day (UTC)", "Risk", "Reports"],
+    report.trend.map((row) => [row.day, row.risk, row.total]), "No reports match these filters.");
+}
+onSubmit("trend-form", loadTrend);
+onSubmit("training-form", async ({ id }) => {
+  await request(`/training/assignments/${encodeURIComponent(id)}/complete`, "POST");
+  showNotice("Course completion recorded.");
 });

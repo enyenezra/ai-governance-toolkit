@@ -27,6 +27,7 @@ Role = Literal[
     "identity_admin",
     "gateway",
     "observer",
+    "scheduler",
 ]
 
 
@@ -100,6 +101,15 @@ def authorize_member(request: Request, session: Session) -> Session:
                 403, "Observer credentials can submit monitoring evidence only."
             )
         return session
+    if session.role == "scheduler":
+        if request.method != "POST" or request.url.path not in {
+            "/v1/review-reminders/run",
+            "/v1/incident-alerts/run",
+        }:
+            raise HTTPException(
+                403, "Scheduler credentials can only run scheduled jobs."
+            )
+        return session
     if session.role == "gateway":
         if request.method != "POST" or request.url.path != "/v1/guardrail-checks":
             raise HTTPException(
@@ -114,6 +124,7 @@ def authorize_member(request: Request, session: Session) -> Session:
             "/v1/access-recertifications",
         }
         or (session.role == "reviewer" and request.url.path == "/v1/access-decisions")
+        or (session.role == "auditor" and request.url.path == "/v1/retention/audit")
         or (
             session.role == "publisher"
             and request.url.path
@@ -125,6 +136,11 @@ def authorize_member(request: Request, session: Session) -> Session:
             and request.url.path == "/v1/policy-publications"
         )
     )
+    allowed_training = (
+        request.method == "POST"
+        and request.url.path.startswith("/v1/training/assignments/")
+        and request.url.path.endswith("/complete")
+    )
     allowed_directory = (
         request.method == "PUT"
         and session.role == "identity_admin"
@@ -135,6 +151,7 @@ def authorize_member(request: Request, session: Session) -> Session:
         and session.role != "editor"
         and not allowed_post
         and not allowed_directory
+        and not allowed_training
     ):
         raise HTTPException(403, "This role cannot perform that operation.")
     return session

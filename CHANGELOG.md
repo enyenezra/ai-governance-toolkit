@@ -30,3 +30,9 @@
 - Twelve deterministic policy templates, a proposed control catalogue and saved drafts.
 - Governance workspace with live inventory, assessment reports and policy views.
 - Existing risk demo, simulations, imports and PostgreSQL permission checks remain accessible.
+
+## Unreleased reporting and operations
+
+- Added executive trend filters, policy reminders, incident intake and training courses.
+- Added policy-linked rule bundles, fail-closed ASGI enforcement and Entra group sync.
+- Added signed audit pages, offline verification and operator-gated audit retention.

@@ -93,7 +93,7 @@ def coverage(
         for tenant in tenants
         if tenant.id == actor.tenant
         for member in tenant.members
-        if member.role not in {"gateway", "observer"}
+        if member.role not in {"gateway", "observer", "scheduler"}
     }
 
     def read():

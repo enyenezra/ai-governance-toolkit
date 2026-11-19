@@ -21,6 +21,7 @@
       <a href="#published">Published policies</a>
       <a href="#controls">Control catalogue</a>
       <a href="#operations">Governance registers</a>
+      <a href="#training">Training courses</a>
       <a href="#access">Access requests</a>
       <a href="#guardrails">Runtime guardrails</a>
       <a href="#directory" id="directory-link" hidden>Identity directory</a>
@@ -48,7 +49,20 @@
         <section id="overview" class="page">
           <h1>Executive governance dashboard</h1>
           <p class="subtitle" id="scope"></p>
-          <div id="metrics" class="metrics"></div>
+          <section class="card"><h2>Risk trends</h2>
+              <form id="trend-form">
+                <div class="row">
+                  <label>Days <input name="days" type="number" min="1" max="366" value="90" required></label>
+                  <label>Department ID <input name="department"></label>
+                  <label>System or agent ID <input name="system"></label>
+                  <label>Risk <select name="risk"><option value="">All risks</option><option>low</option><option>medium</option><option>high</option></select></label>
+                  <label>Decision <select name="disposition"><option value="">All decisions</option><option value="deny">Deny</option><option value="consider_after_review">Human review</option></select></label>
+                </div>
+                <button>Apply filters</button>
+              </form>
+              <p id="trend-count"></p><div id="trend-table"></div>
+            </section>
+            <div id="metrics" class="metrics"></div>
           <section class="card"><h2>Recent risk assessments</h2><div id="recent"></div></section>
         </section>
         <section id="organisation" class="page" hidden>
@@ -129,7 +143,7 @@
         <section id="published" class="page" hidden>
           <h1>Published policies</h1>
           <div class="split">
-            <section class="card"><h2>Current policies</h2><div id="published-list"></div><h2>Review schedule</h2><div id="review-schedule"></div></section>
+            <section class="card"><h2>Current policies</h2><div id="published-list"></div><h2>Review schedule</h2><div id="review-schedule"></div><h2>Due reminders</h2><div id="policy-reminders"></div></section>
             <section class="card"><h2>Policy details</h2><div id="published-detail">Select a published policy to read its clauses.</div></section>
           </div>
         </section>
@@ -219,6 +233,15 @@
               </form>
             </section>
           </div>
+        </section>
+        <section id="training" class="page" hidden>
+          <h1>Training courses</h1>
+          <div id="course-list"></div>
+          <section class="card" id="training-completion" hidden><h2>Record course completion</h2>
+            <form id="training-form"><label>Assignment ID <input name="id" required></label>
+              <button>Attest completion</button>
+            </form>
+          </section>
         </section>
         <section id="audit" class="page" hidden>
           <h1>Governance audit</h1>

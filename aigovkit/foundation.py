@@ -130,7 +130,7 @@ def assess_readiness(request: ReadinessInput, store: Store) -> dict:
 @router.get("/policy-templates")
 def templates() -> list[dict]:
     return [
-        {"id": key, "title": title, "version": "1.0.0"}
+        {"id": key, "title": title, "version": "1.1.0"}
         for key, (title, _) in TEMPLATES.items()
     ]
 
@@ -166,6 +166,25 @@ def create_draft(request: DraftInput, store: Store, actor: Actor) -> dict:
                 ),
             ),
         )
+    context = profile["sector"].casefold()
+    if any(term in context for term in ("health", "finance", "bank", "insurance")):
+        clauses = (
+            *clauses,
+            (
+                "SECTOR-01",
+                "CTRL-DATA",
+                "Have the policy owner document sector-specific data restrictions before use.",
+            ),
+        )
+    if profile["jurisdiction"]:
+        clauses = (
+            *clauses,
+            (
+                "JUR-01",
+                "CTRL-EVIDENCE",
+                f"Record and have a qualified reviewer verify obligations applicable in {profile['jurisdiction']}.",
+            ),
+        )
     return save(
         store,
         "draft",
@@ -173,7 +192,7 @@ def create_draft(request: DraftInput, store: Store, actor: Actor) -> dict:
             **({"created_by": actor.member} if actor.member else {}),
             "title": title,
             "template_id": request.template_id,
-            "template_version": "1.0.0",
+            "template_version": "1.1.0",
             "status": "draft",
             "human_approval_required": True,
             "organisation": profile,

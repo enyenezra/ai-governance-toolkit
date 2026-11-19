@@ -13,20 +13,28 @@ from aigovkit.api import Store, load
 from aigovkit.foundation import Actor, Limit, Offset, database_call
 from aigovkit.models import Agent, Identifier, Simulation, StrictModel
 from aigovkit.policy import evaluate
-from aigovkit.policy_review import named_member
+from aigovkit.policy_review import Version, named_member
 from aigovkit.tenancy import authenticate
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(authenticate)])
 
 
+class PolicyClause(StrictModel):
+    draft_id: Identifier
+    version: Version
+    clause_id: str = Field(min_length=1, max_length=120)
+
+
 class ProposedRule(StrictModel):
     scope: Simulation
     decision: Literal["allow", "deny"]
+    policy_clause: PolicyClause | None = None
 
 
 class Deployment(StrictModel):
     agent_id: Identifier
     revision_id: Identifier | None = None
+    revision_ids: list[Identifier] = Field(default_factory=list, max_length=20)
     operation: Literal["deploy", "rollback", "suspend", "resume"]
     expected_version: int = Field(ge=0, le=2_147_483_646)
 
@@ -50,6 +58,21 @@ def insert(cursor, kind: str, key: str, body: dict) -> None:
     )
 
 
+def active_clause(cursor, reference: dict) -> bool:
+    return (
+        cursor.execute(
+            """
+        SELECT 1 FROM policy_publications p JOIN policy_revisions r USING (draft_id,version)
+        WHERE p.draft_id=%s AND p.version=%s
+          AND p.version=(SELECT max(version) FROM policy_publications WHERE draft_id=p.draft_id)
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.body->'clauses') c WHERE c->>'id'=%s)
+        """,
+            (reference["draft_id"], reference["version"], reference["clause_id"]),
+        ).fetchone()
+        is not None
+    )
+
+
 @router.post("/guardrail-rules", status_code=201)
 def propose(request: ProposedRule, actor: Actor, store: Store) -> dict:
     author = named_member(actor, "editor")
@@ -63,8 +86,20 @@ def propose(request: ProposedRule, actor: Actor, store: Store) -> dict:
     ):
         raise HTTPException(422, "Register the agent first.")
     rule = {"id": uuid4().hex, "author": author, **request.model_dump(mode="json")}
-    database_call(store.put_document, "guardrail_rule", rule["id"], rule)
-    return rule
+
+    def create():
+        with store.connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
+            if rule["policy_clause"] and not active_clause(
+                cursor, rule["policy_clause"]
+            ):
+                raise HTTPException(
+                    422, "Select a clause from a current published policy."
+                )
+            insert(cursor, "guardrail_rule", rule["id"], rule)
+            store.audit(cursor, "guardrail_rule.created", "guardrail_rule", rule["id"])
+            return rule
+
+    return database_call(create)
 
 
 @router.post("/guardrail-deployments")
@@ -81,37 +116,59 @@ def deploy(request: Deployment, actor: Actor, store: Store) -> dict:
             previous_version = current["version"] if current else 0
             if request.expected_version != previous_version:
                 raise HTTPException(409, "Load the current gate version first.")
-            selected = current["revision_id"] if current else None
+            selected = (
+                current.get(
+                    "revision_ids",
+                    [current["revision_id"]] if current["revision_id"] else [],
+                )
+                if current
+                else []
+            )
+            if request.revision_id and request.revision_ids:
+                raise HTTPException(422, "Choose one rule or a rule bundle.")
             suspended = current["suspended"] if current else False
             if request.operation in {"suspend", "resume"}:
-                if request.revision_id is not None:
+                if request.revision_id is not None or request.revision_ids:
                     raise HTTPException(422, "Suspend and resume do not select a rule.")
                 suspended = request.operation == "suspend"
             else:
-                rule = (
-                    get(cursor, "guardrail_rule", request.revision_id)
-                    if request.revision_id
-                    else None
+                selected = request.revision_ids or (
+                    [request.revision_id] if request.revision_id else []
                 )
-                if not rule or rule["scope"]["agent_id"] != request.agent_id:
-                    raise HTTPException(404, "Agent rule not found.")
-                if rule["author"] == publisher:
-                    raise HTTPException(403, "A rule author cannot deploy that rule.")
+                if not selected or len(set(selected)) != len(selected):
+                    raise HTTPException(422, "Select one or more distinct rules.")
+                for key in selected:
+                    rule = get(cursor, "guardrail_rule", key)
+                    if not rule or rule["scope"]["agent_id"] != request.agent_id:
+                        raise HTTPException(404, "Agent rule not found.")
+                    if rule.get("policy_clause") and not active_clause(
+                        cursor, rule["policy_clause"]
+                    ):
+                        raise HTTPException(
+                            409, "A linked policy version is no longer current."
+                        )
+                    if rule["author"] == publisher:
+                        raise HTTPException(
+                            403, "A rule author cannot deploy that rule."
+                        )
                 if (
                     request.operation == "rollback"
                     and not cursor.execute(
                         """SELECT 1 FROM foundation_documents WHERE kind='guardrail_deployment'
-                       AND body->>'agent_id'=%s AND body->>'revision_id'=%s LIMIT 1""",
-                        (request.agent_id, rule["id"]),
+                         AND body->>'agent_id'=%s AND (
+                             body->'revision_ids'=%s OR (NOT body ? 'revision_ids'
+                               AND jsonb_build_array(body->>'revision_id')=%s)
+                         ) LIMIT 1""",
+                        (request.agent_id, Jsonb(selected), Jsonb(selected)),
                     ).fetchone()
                 ):
                     raise HTTPException(
-                        409, "Rollback requires a previously deployed rule."
+                        409, "Rollback requires a previously deployed bundle."
                     )
-                selected = rule["id"]
             state = {
                 "agent_id": request.agent_id,
-                "revision_id": selected,
+                "revision_id": selected[0] if selected else None,
+                "revision_ids": selected,
                 "suspended": suspended,
                 "publisher": publisher,
                 "operation": request.operation,
@@ -168,19 +225,32 @@ def gateway(request: Simulation, actor: Actor, store: Store) -> JSONResponse:
             if state and state["suspended"]:
                 reason = "This agent is suspended at the AIGovKit gate."
             elif state and state["revision_id"]:
-                rule = get(cursor, "guardrail_rule", state["revision_id"])
-                if rule and rule["scope"] == request.model_dump(mode="json"):
+                ids = state.get("revision_ids", [state["revision_id"]])
+                candidates = [get(cursor, "guardrail_rule", key) for key in ids]
+                matching = [
+                    rule
+                    for rule in candidates
+                    if rule and rule["scope"] == request.model_dump(mode="json")
+                ]
+                if matching:
                     assessment = evaluate(request, records)
                     if (
-                        rule["decision"] == "allow"
+                        all(
+                            rule["decision"] == "allow"
+                            and (
+                                not rule.get("policy_clause")
+                                or active_clause(cursor, rule["policy_clause"])
+                            )
+                            for rule in matching
+                        )
                         and assessment.disposition == "consider_after_review"
                     ):
                         decision, reason = (
                             "allow",
-                            "Published gate rule and current inventory match.",
+                            "Published gate rules and current inventory match.",
                         )
                     else:
-                        reason = "The rule or current inventory denies this request."
+                        reason = "A rule or current inventory denies this request."
             evidence = {
                 "id": uuid4().hex,
                 "agent_id": request.agent_id,
