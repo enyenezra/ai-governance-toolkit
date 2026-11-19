@@ -1,4 +1,4 @@
-# AIGovKit v0.1.0
+# AIGovKit
 
 AIGovKit is an open-source, self-hosted AI governance toolkit for teams that
 need to understand which organisational data their AI applications and agents
@@ -16,7 +16,7 @@ the OpenAPI documentation, [architecture overview](docs/architecture.md) and
 [sample inputs](examples/README.md). See [Contributing](CONTRIBUTING.md) for
 ways to help and [Security](SECURITY.md) for deployment and reporting guidance.
 
-## Foundation workspace
+## Governance workspace
 
 Open [the workspace](http://127.0.0.1:8000/workspace) after starting the demo.
 Sign in with the configured key. Set the organisation profile, register an AI
@@ -28,13 +28,13 @@ The original scoring demo remains available at `/`.
 Named editors and independent reviewers can revise, submit and review drafts.
 A separate publisher can publish an approved revision inside the organisation.
 Named members can acknowledge a specific published version. See the
-[policy review](docs/policy-review.md) and [publication](docs/policy-publication.md) guides. See the
-[foundation plan](docs/foundation-plan.md) for the baseline audit, security
+[policy review](docs/policy-review.md) and [publication](docs/policy-publication.md)
+guides for the workflow, and the [foundation plan](docs/foundation-plan.md) for the baseline audit, security
 model and release roadmap.
 
 ## Run a local demo
 
-The full demo requires Docker Compose and a terminal. Run these commands from
+The single-organisation demo requires Docker Compose and a terminal. Run these commands from
 the repository root in the same terminal:
 
 ```sh
@@ -129,12 +129,16 @@ approval for any real-world access decision. AIGovKit never grants or changes ac
 | `GET /v1/readiness/assessments`, `POST /v1/readiness/assessments` | List or save explainable readiness results |
 | `GET /v1/policy-templates`, `GET /v1/controls` | List the templates and proposed controls |
 | `GET /v1/policy-drafts`, `POST /v1/policy-drafts`, `GET /v1/policy-drafts/{id}` | List, generate or retrieve saved drafts |
+| `GET /v1/policy-drafts/{id}/revisions`, `POST /v1/policy-drafts/{id}/revisions` | List or create versioned clause revisions |
+| `POST /v1/policy-reviews` | Record an independent review decision |
+| `POST /v1/policy-publications`, `GET /v1/published-policies` | Publish an approved version or list current published policies |
+| `POST /v1/policy-acknowledgements`, `GET /v1/policy-acknowledgements` | Acknowledge a version or list your receipts |
 | `GET /health` | Check process liveness |
 
 For example, register an asset with
 `PUT /v1/inventory/asset/handbook` and a JSON body of
 `{"kind":"asset","id":"handbook","name":"Staff handbook","classification":"internal"}`.
-See [the example inventory](examples/department-inventory.json) for all five record shapes.
+See [the example inventory](examples/department-inventory.json) for all six record shapes.
 
 Use Control-C to stop Uvicorn and `docker stop aigovkit-demo` to remove the
 temporary demo database. Use persistent PostgreSQL storage and backups for real inventory.
@@ -155,7 +159,7 @@ reads PostgreSQL metadata and makes no changes. See the
 
 ## Feature status
 
-| Capability | v0.1.0 status |
+| Capability | Current status |
 | --- | --- |
 | AI tool and agent registry | Owners, allowed purposes and declared capabilities, with PostgreSQL persistence |
 | Department access assessment | Policy 1.1.0 checks department, role, business purpose, sensitivity and exact scope. Version 1.0.0 remains available for older clients |
@@ -164,18 +168,29 @@ reads PostgreSQL metadata and makes no changes. See the
 | Risk scoring and reporting | Versioned JSON findings, controls and saved reports. Scores are 25 for low, 50 for medium, and 100 for high |
 | Developer integrations | REST and OpenAPI, synthetic examples, and a documented read-only connector contract. Other providers are unimplemented |
 | Open-source infrastructure | Docker Compose, PostgreSQL integration tests, CI, MIT licence, contribution and security docs, and issue templates |
-| Identity, approvals and audit | Tenant-scoped shared keys and named editor and reviewer keys. Policy decisions record an actor and rationale. OIDC and cross-module audit logging are planned |
-| Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator and library, and proposed control catalogue |
+| Policy workflow | Save immutable revisions, require independent review and publication, and record acknowledgements against the exact published version |
+| Identity and audit | Tenant-scoped shared keys and named reader, editor, reviewer and publisher keys. Policy history records who made each decision. OIDC and cross-module audit logging are planned |
+| Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator, policy library, published policies and proposed control catalogue |
 
 ## Run multiple organisations
 
-Configure `AIGOVKIT_TENANTS` with a JSON array of objects containing `id`,
-`editor_key` and an optional `reader_key`. Generate a different random key of
-at least 32 characters for each role and organisation. Run bootstrap before
+Configure `AIGOVKIT_TENANTS` with a JSON array of organisations. Each has
+an `id` and a `members` array whose entries have a stable `id`, a `role` and a
+unique `key`. Generate random keys of at least 32 characters. The configuration
+also accepts optional shared `editor_key` and `reader_key` values for existing
+API clients. Shared keys cannot act in the named policy workflow.
+
+| Role | Policy workflow |
+| --- | --- |
+| `editor` | Generate drafts, save revisions and submit their own revisions |
+| `reviewer` | Approve or request changes to a revision they did not author |
+| `publisher` | Publish the latest approved revision. Must be separate from the draft creator, revision author and approver |
+| `reader` | Read policies and acknowledge a published version with a named key |
+
+All named members can acknowledge the current published version. Each key
+resolves server-side to one organisation and schema. Run bootstrap before
 starting the API, or recreate the Compose API service after updating the
-configuration. Each key resolves to one organisation and schema. Reader keys
-can view records. Editor keys can write records and run simulations.
-The legacy key works only when the tenant configuration is absent.
+configuration. `AIGOVKIT_API_KEY` is used only when tenant mode is absent.
 
 To load example inventory in tenant mode, use
 `python -m aigovkit.bootstrap --tenant YOUR_TENANT --import-json examples/department-inventory.json`.
