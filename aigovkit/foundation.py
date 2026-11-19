@@ -212,3 +212,15 @@ def list_drafts(store: Store, offset: Offset = 0, limit: Limit = 20) -> list[dic
 @router.get("/readiness/assessments")
 def list_readiness(store: Store, offset: Offset = 0, limit: Limit = 20) -> list[dict]:
     return database_call(store.documents, "readiness", offset, limit)
+
+
+@router.get("/audit-events")
+def audit_events(
+    store: Store,
+    actor: Actor,
+    before: Annotated[int | None, Query(ge=1, le=9_223_372_036_854_775_807)] = None,
+    limit: Limit = 20,
+) -> list[dict]:
+    if actor.role != "auditor" or actor.member is None:
+        raise HTTPException(403, "A named auditor is required.")
+    return database_call(store.audit_events, before, limit)

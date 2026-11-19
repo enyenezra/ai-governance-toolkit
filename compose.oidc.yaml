@@ -1,0 +1,13 @@
+services:
+  api:
+    environment:
+      AIGOVKIT_OIDC_ISSUER: ${AIGOVKIT_OIDC_ISSUER:?Set the OIDC issuer}
+      AIGOVKIT_OIDC_AUDIENCE: ${AIGOVKIT_OIDC_AUDIENCE:?Set the API audience}
+      AIGOVKIT_OIDC_JWKS_FILE: /run/aigovkit/public-jwks.json
+    volumes:
+      - type: bind
+        source: ${AIGOVKIT_OIDC_JWKS_FILE:?Set the absolute path to the public JWKS}
+        target: /run/aigovkit/public-jwks.json
+        read_only: true
+        bind:
+          create_host_path: false

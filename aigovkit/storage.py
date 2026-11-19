@@ -3,10 +3,12 @@ from collections.abc import Iterable
 
 import psycopg
 from psycopg import sql
+from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter
 
 from aigovkit.models import Record, RiskReport
+from aigovkit.tenancy import Session
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS governance_inventory (
@@ -61,15 +63,28 @@ CREATE TABLE IF NOT EXISTS policy_acknowledgements (
     PRIMARY KEY (draft_id, version, member_id),
     FOREIGN KEY (draft_id, version) REFERENCES policy_publications (draft_id, version)
 );
+CREATE TABLE IF NOT EXISTS governance_audit (
+    event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    actor_id text,
+    credential text NOT NULL,
+    action text NOT NULL,
+    resource_type text NOT NULL,
+    resource_id text NOT NULL,
+    version integer
+);
 """
 SCHEMA_LOCK_ID = 0x4149474F564B4954
 record_adapter = TypeAdapter(Record)
 
 
 class PostgresInventory:
-    def __init__(self, dsn: str, schema: str | None = None):
+    def __init__(
+        self, dsn: str, schema: str | None = None, actor: Session | None = None
+    ):
         self.dsn = dsn
         self.schema = schema
+        self.actor = actor
 
     def connect(self):
         conn = psycopg.connect(self.dsn, connect_timeout=5)
@@ -97,6 +112,7 @@ class PostgresInventory:
             conn.execute(SCHEMA)
 
     def put(self, records: Iterable[Record]) -> None:
+        entries = list(records)
         with (
             self.connect() as conn,
             conn.cursor() as cursor,
@@ -106,8 +122,11 @@ class PostgresInventory:
                 INSERT INTO governance_inventory (kind, id, body) VALUES (%s, %s, %s)
                 ON CONFLICT (kind, id) DO UPDATE SET body = EXCLUDED.body
                 """,
-                [(r.kind, r.id, Jsonb(r.model_dump(mode="json"))) for r in records],
+                [(r.kind, r.id, Jsonb(r.model_dump(mode="json"))) for r in entries],
             )
+
+            for record in entries:
+                self.audit(cursor, "inventory.upserted", record.kind, record.id)
 
     def records(self) -> list[Record]:
         with self.connect() as conn:
@@ -124,6 +143,8 @@ class PostgresInventory:
                 "INSERT INTO governance_reports (id, created_at, body) VALUES (%s, %s, %s)",
                 (report.id, report.created_at, Jsonb(report.model_dump(mode="json"))),
             )
+
+            self.audit(conn, "risk_report.created", "risk_report", report.id)
 
     def get_report(self, report_id: str) -> RiskReport | None:
         with self.connect() as conn:
@@ -155,6 +176,13 @@ class PostgresInventory:
         with self.connect() as conn:
             conn.execute(statement, (kind, document_id, Jsonb(body)))
 
+            self.audit(
+                conn,
+                "profile.updated" if replace else f"{kind}.created",
+                kind,
+                document_id,
+            )
+
     def get_document(self, kind: str, document_id: str) -> dict | None:
         with self.connect() as conn:
             row = conn.execute(
@@ -171,3 +199,41 @@ class PostgresInventory:
                 (kind, limit, offset),
             )
             return [body for (body,) in rows]
+
+    def audit(
+        self,
+        executor,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        version: int | None = None,
+    ) -> None:
+        if self.actor is None:
+            return
+        credential = self.actor.credential if self.actor.member else "shared_key"
+        executor.execute(
+            """
+            INSERT INTO governance_audit (actor_id, credential, action, resource_type, resource_id, version)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                self.actor.member,
+                credential,
+                action,
+                resource_type,
+                resource_id,
+                version,
+            ),
+        )
+
+    def audit_events(self, before: int | None, limit: int) -> list[dict]:
+        statement = """
+            SELECT event_id, occurred_at, actor_id, credential, action, resource_type, resource_id, version
+            FROM governance_audit
+        """
+        where = " WHERE event_id < %s" if before is not None else ""
+        params = (before, limit) if before is not None else (limit,)
+        with self.connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
+            return cursor.execute(
+                statement + where + " ORDER BY event_id DESC LIMIT %s", params
+            ).fetchall()

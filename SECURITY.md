@@ -37,3 +37,9 @@ and avoid placing its connection URL in shell history or logs.
 Policy review uses distinct named credentials and stable member IDs. Configure
 those IDs for separate individuals and keep a private provisioning record.
 See [policy review](docs/policy-review.md) for separation and audit boundaries.
+
+[OIDC access-token verification](docs/oidc-audit.md) trusts one configured
+issuer and API audience. Provision its public signing keys through the
+deployment and avoid logging bearer credentials. Remove subject bindings
+when users leave. The audit feed is application-level evidence and relies
+on PostgreSQL access controls and backups.

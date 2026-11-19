@@ -169,7 +169,7 @@ reads PostgreSQL metadata and makes no changes. See the
 | Developer integrations | REST and OpenAPI, synthetic examples, and a documented read-only connector contract. Other providers are unimplemented |
 | Open-source infrastructure | Docker Compose, PostgreSQL integration tests, CI, MIT licence, contribution and security docs, and issue templates |
 | Policy workflow | Save immutable revisions, require independent review and publication, and record acknowledgements against the exact published version |
-| Identity and audit | Tenant-scoped shared keys and named reader, editor, reviewer and publisher keys. Policy history records who made each decision. OIDC and cross-module audit logging are planned |
+| Identity and audit | Tenant-scoped keys or OIDC access tokens with named roles. Auditors can view attributable changes across the governance API. Browser redirect sign-in remains planned |
 | Foundation workspace | Dashboard, organisation setup, inventory, readiness, access risk, draft generator, policy library, published policies and proposed control catalogue |
 
 ## Run multiple organisations
@@ -197,6 +197,12 @@ To load example inventory in tenant mode, use
 Existing single-organisation data stays in its legacy schema. Moving it into
 a tenant schema requires an operator-managed migration. See
 [deployment boundaries](SECURITY.md).
+
+## OIDC access tokens and audit
+
+Use [the OIDC and audit guide](docs/oidc-audit.md) to connect a compatible
+issuer, bind subjects to tenant roles and enable the auditor view. AIGovKit
+accepts access tokens issued for this API. The workspace also accepts API keys.
 
 ## Original risk scoring demo
 

@@ -20,6 +20,7 @@
       <a href="#library">Policy library</a>
       <a href="#published">Published policies</a>
       <a href="#controls">Control catalogue</a>
+      <a href="#audit" id="audit-link" hidden>Audit events</a>
     </nav>
     <div class="sidebar-footer"><a href="/docs">API documentation ↗</a></div>
   </aside>
@@ -28,9 +29,12 @@
     <div id="content">
       <section class="card" id="login">
         <h1>Sign in to AIGovKit</h1>
-        <p>Enter the API key issued for your organisation. Closing or reloading this page clears it.</p>
+        <p>Use an organisation API key or an access token issued for the AIGovKit API. Reloading clears it.</p>
         <form id="login-form">
-          <label>Organisation API key <input name="key" type="password" maxlength="256" required autocomplete="off"></label>
+          <label>Credential type <select name="credential" id="credential-type">
+            <option value="api_key">API key</option><option value="oidc">OIDC access token</option>
+          </select></label>
+          <label><span id="credential-label">Organisation API key</span><input name="key" type="password" maxlength="256" required autocomplete="off"></label>
           <button type="submit">Open workspace</button>
         </form>
       </section>
@@ -122,6 +126,13 @@
             <section class="card"><h2>Current policies</h2><div id="published-list"></div></section>
             <section class="card"><h2>Policy details</h2><div id="published-detail">Select a published policy to read its clauses.</div></section>
           </div>
+        </section>
+        <section id="audit" class="page" hidden>
+          <h1>Governance audit</h1>
+          <section class="card"><h2>Recorded changes</h2><div id="audit-events"></div>
+            <button id="audit-more" type="button" class="secondary" hidden>View older events</button>
+            <button id="audit-newest" type="button" class="secondary" hidden>View newest events</button>
+          </section>
         </section>
         <section id="controls" class="page" hidden><h1>Control catalogue</h1><section class="card"><div id="control-list"></div></section></section>
       </div>

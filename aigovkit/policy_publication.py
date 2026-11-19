@@ -59,6 +59,9 @@ def publish(request: PolicyVersion, store: Store, actor: Actor) -> dict:
             ).fetchone()
             if result is None:
                 raise HTTPException(409, "This revision is already published.")
+            store.audit(
+                cursor, "policy.published", "policy", request.draft_id, request.version
+            )
             return result
 
     return database_call(write)

@@ -106,6 +106,7 @@ def write_revision(
             "INSERT INTO policy_revisions (draft_id, version, author, body) VALUES (%s, %s, %s, %s)",
             (draft_id, version, author, Jsonb(snapshot)),
         )
+        store.audit(cursor, "policy.revised", "policy", draft_id, version)
         return revision(cursor, draft_id, version)
 
 
@@ -135,6 +136,7 @@ def record_event(
             """,
             (draft_id, version, action, actor, note),
         ).fetchone()
+        store.audit(cursor, f"policy.{action}", "policy", draft_id, version)
         return result
 
 

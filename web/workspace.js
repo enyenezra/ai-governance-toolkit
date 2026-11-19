@@ -2,7 +2,8 @@
 
 const byId = (id) => document.getElementById(id);
 const pages = [...document.querySelectorAll(".page")];
-let apiKey = "";
+let secret = "";
+let credentialType = "api_key";
 let session;
 let inventory = [];
 
@@ -21,7 +22,10 @@ async function request(path, method = "GET", data) {
   const response = await fetch("/v1" + path, {
     method,
     cache: "no-store",
-    headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+    headers: {
+      ...(credentialType === "oidc" ? { Authorization: "Bearer " + secret } : { "X-API-Key": secret }),
+      "Content-Type": "application/json",
+    },
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   const value = await response.json();
@@ -370,6 +374,7 @@ const load = {
     });
     byId("published-list").replaceChildren(...(entries.length ? entries : [node("p", "No published policies yet.")]));
   },
+  audit: () => loadAudit(),
   async controls() {
     const controls = await request("/controls");
     table("control-list", ["Control", "Description", "Status"], controls.map((control) => [
@@ -377,6 +382,18 @@ const load = {
     ]));
   },
 };
+
+async function loadAudit(before) {
+  const events = await request("/audit-events?limit=20" + (before ? "&before=" + before : ""));
+  table("audit-events", ["Time", "Actor", "Credential", "Action", "Resource", "Revision"], events.map((event) => [
+    new Date(event.occurred_at).toLocaleString(), event.actor_id ?? "Shared key", event.credential,
+    event.action, `${event.resource_type} / ${event.resource_id}`, event.version,
+  ]), "No more events.");
+  byId("audit-more").hidden = events.length < 20;
+  byId("audit-more").onclick = () => runPolicyAction(() => loadAudit(events.at(-1).event_id));
+  byId("audit-newest").hidden = !before;
+}
+byId("audit-newest").addEventListener("click", () => runPolicyAction(() => loadAudit()));
 
 async function navigate() {
   if (!session) return;
@@ -395,16 +412,23 @@ async function navigate() {
   }
 }
 
-onSubmit("login-form", async ({ key }, form) => {
-  apiKey = key;
-  form.reset();
+byId("credential-type").addEventListener("change", (event) => {
+  const oidc = event.target.value === "oidc";
+  byId("credential-label").textContent = oidc ? "OIDC access token" : "Organisation API key";
+  event.target.form.elements.namedItem("key").maxLength = oidc ? 8192 : 256;
+});
+onSubmit("login-form", async ({ key, credential }, form) => {
+  secret = key.trim();
+  credentialType = credential;
+  form.elements.namedItem("key").value = "";
   try {
     session = await request("/session");
   } catch (error) {
-    apiKey = "";
+    secret = "";
     throw error;
   }
   for (const element of document.querySelectorAll("[data-write]")) element.hidden = session.role !== "editor";
+  byId("audit-link").hidden = session.role !== "auditor";
   byId("login").hidden = true;
   byId("workspace").hidden = false;
   byId("signout").hidden = false;

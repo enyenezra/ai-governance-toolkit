@@ -27,6 +27,15 @@ from aigovkit.tenancy import Session, authenticate, schema_for
 
 class Inventory(Protocol):
     def connect(self) -> psycopg.Connection: ...
+    def audit(
+        self,
+        executor,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        version: int | None = None,
+    ) -> None: ...
+    def audit_events(self, before: int | None, limit: int) -> list[dict]: ...
     def put(self, records: list[Record]) -> None: ...
     def records(self) -> list[Record]: ...
     def save_report(self, report: RiskReport) -> None: ...
@@ -44,7 +53,7 @@ def get_inventory(session: Annotated[Session, Depends(authenticate)]) -> Invento
     if not dsn:
         raise HTTPException(503, "Governance database is not configured.")
     return PostgresInventory(
-        dsn, schema_for(session.tenant) if session.tenant else None
+        dsn, schema_for(session.tenant) if session.tenant else None, actor=session
     )
 
 

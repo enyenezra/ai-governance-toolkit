@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased identity and audit
+
+- Validate RFC 9068 access tokens against a trusted local public JWKS.
+- Bind verified subjects to named tenant roles and record attributable governance writes.
+- Provide a restricted audit API and workspace view.
+
 ## Unreleased policy publication
 
 - Added an independent publisher role and a version-specific published policy view.
