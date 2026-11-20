@@ -214,9 +214,9 @@ class PostgresInventory:
         resource_type: str,
         resource_id: str,
         version: int | None = None,
-    ) -> None:
+    ) -> int | None:
         if self.actor is None:
-            return
+            return None
         credential = self.actor.credential if self.actor.member else "shared_key"
         row = executor.execute(
             """
@@ -242,6 +242,7 @@ class PostgresInventory:
             version,
             self.actor.tenant,
         )
+        return event_id
 
     def audit_events(self, before: int | None, limit: int) -> list[dict]:
         statement = """

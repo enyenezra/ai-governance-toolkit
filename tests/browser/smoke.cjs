@@ -38,6 +38,34 @@ async function main() {
     await page.getByRole("button", { name: "Save organisation" }).click();
     await page.getByText("Organisation saved.").waitFor();
 
+    const today = new Date().toISOString().slice(0, 10);
+    await page.getByRole("link", { name: "Executive reports" }).click();
+    await page.getByLabel("Period start").fill(today);
+    await page.getByLabel("Period end").fill(today);
+    await page.getByRole("button", { name: "Generate report" }).click();
+    await page.getByText("0 assessments · 0 high risk").waitFor();
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download PDF" }).click();
+    assert.match((await download).suggestedFilename(), /^aigovkit-.*\.pdf$/);
+    await assertAccessible(page);
+
+    await page.getByRole("link", { name: "Training courses" }).click();
+    await page.locator("#learning-course-select").selectOption("responsible-use-v1");
+    await page.getByLabel("Learner member ID").fill("reader");
+    await page.getByLabel("Due date").fill(today);
+    await page.getByRole("button", { name: "Assign training" }).click();
+    await page.getByText(/reader · Due .* · assigned/).waitFor();
+    const courseDraft = page.locator("#course-editor");
+    await courseDraft.getByLabel("Course ID").fill("browser-course");
+    await courseDraft.getByLabel("Course title").fill("Browser authored course");
+    await courseDraft.getByLabel("Lesson text").fill("Use approved tools.");
+    await courseDraft.getByLabel("Quiz question").fill("Which tools are approved?");
+    await courseDraft.getByLabel("First choice").fill("Approved tools");
+    await courseDraft.getByLabel("Second choice").fill("Any tool");
+    await courseDraft.getByRole("button", { name: "Save course draft" }).click();
+    await page.getByText("Course draft saved.").waitFor();
+    await assertAccessible(page);
+
     await page.getByRole("link", { name: "Provider enforcement" }).click();
     await page.getByRole("heading", { name: "Register a provider" }).waitFor();
     const providerForm = page.locator("#provider-form");
@@ -66,7 +94,20 @@ async function main() {
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.getByRole("heading", { name: "Sign in to AIGovKit" }).waitFor();
 
+    await login(process.env.AIGOVKIT_BROWSER_PUBLISHER);
+    await page.getByRole("link", { name: "Training courses" }).click();
+    await page.getByRole("button", { name: "Publish course" }).click();
+    await page.getByText("Course published.").waitFor();
+    await assertAccessible(page);
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("heading", { name: "Sign in to AIGovKit" }).waitFor();
+
     await login(readerKey);
+    assert.equal(await page.getByRole("link", { name: "Executive reports" }).isVisible(), false);
+    await page.getByRole("link", { name: "Training courses" }).click();
+    await page.getByRole("button", { name: "Verify the output against a trusted source" }).click();
+    await page.getByText("Score 100%").waitFor();
+    await assertAccessible(page);
     await page.getByRole("link", { name: "Organisation setup" }).click();
     await page.getByText(/Browser smoke tenant/).waitFor();
     assert.equal(await page.getByRole("button", { name: "Save organisation" }).isVisible(), false);

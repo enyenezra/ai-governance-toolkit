@@ -113,6 +113,11 @@ def authorize_member(request: Request, session: Session) -> Session:
             "/v1/workspace-discovery/run",
             "/v1/security-detections/run",
             "/v1/notifications/run",
+            "/v1/board-reports/run",
+            "/v1/learning/run",
+            "/v1/learning/enrolments/run",
+            "/v1/reassessments/run",
+            "/v1/audit-exporter/run",
         }:
             raise HTTPException(
                 403, "Scheduler credentials can only run scheduled jobs."
@@ -147,10 +152,15 @@ def authorize_member(request: Request, session: Session) -> Session:
             and request.url.path == "/v1/policy-publications"
         )
     )
-    allowed_training = (
-        request.method == "POST"
-        and request.url.path.startswith("/v1/training/assignments/")
-        and request.url.path.endswith("/complete")
+    allowed_training = request.method == "POST" and (
+        (
+            request.url.path.startswith("/v1/training/assignments/")
+            and request.url.path.endswith("/complete")
+        )
+        or (
+            request.url.path.startswith("/v1/learning/assignments/")
+            and request.url.path.endswith("/answer")
+        )
     )
     provider_publish = (
         request.method == "POST"
@@ -175,6 +185,12 @@ def authorize_member(request: Request, session: Session) -> Session:
         and not provider_publish
         and not allowed_directory
         and not allowed_training
+        and not (
+            session.role == "publisher"
+            and request.method == "POST"
+            and request.url.path.startswith("/v1/learning/course-drafts/")
+            and request.url.path.endswith("/publish")
+        )
     ):
         raise HTTPException(403, "This role cannot perform that operation.")
     return session

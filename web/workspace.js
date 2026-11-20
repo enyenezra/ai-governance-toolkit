@@ -597,12 +597,147 @@ const load = {
     }));
   },
   devices: () => loadDevices(0),
+  async executive() {
+    if (!session.member_id || !["editor", "auditor", "publisher"].includes(session.role)) {
+      throw new Error("Executive reports require a named governance role.");
+    }
+    const reports = await request("/board-reports");
+    byId("board-list").replaceChildren(...reports.map((report) => {
+      const card = node("section", undefined, "card");
+      const { start, end, template } = report.scope;
+      card.append(node("h2", `${template} · ${start} to ${end}`),
+        node("p", `${report.metrics.assessments} assessments · ${report.metrics.high_risk_assessments} high risk`),
+        list(report.recommended_actions));
+      const details = node("details");
+      details.append(node("summary", "Report metrics"), list(Object.entries(report.metrics).map(
+        ([name, value]) => `${name.replaceAll("_", " ")} · ${value}`)));
+      card.append(details);
+      for (const format of ["json", "csv", "pdf", "docx"]) {
+        const button = node("button", `Download ${format.toUpperCase()}`, "secondary");
+        button.type = "button";
+        button.addEventListener("click", async () => {
+          try {
+            const result = await fetch(`/v1/board-reports/${encodeURIComponent(report.id)}/export/${format}`,
+              { headers: authHeaders(), cache: "no-store" });
+            if (!result.ok) throw new Error("Report download failed.");
+            const url = URL.createObjectURL(await result.blob());
+            const link = node("a");
+            link.href = url;
+            link.download = `aigovkit-${report.id}.${format}`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          } catch (error) { showNotice(error.message); }
+        });
+        card.append(button);
+      }
+      return card;
+    }));
+    if (!reports.length) byId("board-list").append(node("p", "No executive reports yet."));
+    if (session.role === "editor") {
+      const schedule = await request("/board-reports/schedule");
+      const fields = byId("board-schedule").elements;
+      fields.namedItem("enabled").checked = schedule.enabled;
+      fields.namedItem("days").value = schedule.days;
+    }
+    const canInspect = ["editor", "auditor"].includes(session.role);
+    byId("export-history-panel").hidden = !canInspect;
+    byId("reassessment-panel").hidden = !canInspect;
+    if (canInspect) {
+      const tasks = await request("/reassessments");
+      table("reassessment-list", ["Record", "Owner", "Due"], tasks.map((task) => [
+        task.title, task.owner, task.due,
+      ]));
+    }
+    if (canInspect) {
+      const history = await request("/audit-exporter/history");
+      table("export-history", ["Batch", "State", "Attempts", "Last error"], history.map((row) => [
+        row.batch_id, row.state, row.attempts, row.last_error,
+      ]));
+    }
+  },
   async training() {
-    const courses = await request("/training/courses");
+    byId("learning-assign-button").disabled = true;
+    const courses = await request("/learning/courses");
+    const drafts = byId("course-drafts");
+    drafts.replaceChildren();
+    byId("course-edit-panel").hidden = !session.member_id || session.role !== "editor";
+    if (session.member_id && ["editor", "publisher"].includes(session.role)) {
+      for (const draft of await request("/learning/course-drafts")) {
+        const card = node("section", undefined, "card");
+        card.append(node("h2", draft.title), node("p", `Revision ${draft.revision} · ${draft.published_id ? "Published" : "Draft"}`),
+          node("p", draft.lesson), node("p", draft.question),
+          list(draft.choices.map((choice, index) => index === draft.correct_choice ? choice + " (correct)" : choice)));
+        const editor = session.role === "editor";
+        if (editor || !draft.published_id) {
+          const button = node("button", editor ? "Edit draft" : "Publish course", "secondary");
+          button.type = "button";
+          button.addEventListener("click", async () => {
+            if (editor) {
+              const fields = {
+                ...draft, first: draft.choices[0], second: draft.choices[1],
+              };
+              for (const field of byId("course-editor").elements) {
+                if (field.name in fields) field.value = fields[field.name];
+              }
+              byId("course-editor").elements.namedItem("title").focus();
+              return;
+            }
+            try {
+              await request(`/learning/course-drafts/${encodeURIComponent(draft.course_id)}/publish`,
+                "POST", { expected_revision: draft.revision });
+              await load.training();
+              showNotice("Course published.");
+            } catch (error) { showNotice(error.message); }
+          });
+          card.append(button);
+        }
+        drafts.append(card);
+      }
+    }
+    byId("learning-course-select").replaceChildren(...courses.map((course) => {
+      const option = node("option", course.title);
+      option.value = course.id;
+      return option;
+    }));
+    const canManage = session.member_id && session.role === "editor";
+    byId("enrolment-panel").hidden = !canManage;
+    if (canManage) {
+      byId("enrolment-course").replaceChildren(...byId("learning-course-select").cloneNode(true).children);
+      const rules = await request("/learning/enrolment-rules");
+      const names = new Map(courses.map((course) => [course.id, course.title]));
+      table("enrolment-rules", ["Rule", "Course", "Role", "Group", "Active", "Refresher days"], rules.map(
+        (rule) => [rule.id, names.get(rule.course_id) || rule.course_id, rule.role, rule.group,
+          rule.enabled ? "Yes" : "No", rule.refresher_days]));
+    }
+    const assignments = session.member_id ? await request("/learning/assignments") : [];
+    byId("learning-assignments").replaceChildren(...await Promise.all(assignments.map(async (assignment) => {
+      const course = courses.find((entry) => entry.id === assignment.course_id) ||
+        await request(`/learning/courses/${encodeURIComponent(assignment.course_id)}`);
+      const card = node("section", undefined, "card");
+      card.append(node("h2", course.title), node("p", `${assignment.learner} · Due ${assignment.due} · ${assignment.status}`));
+      if (assignment.score !== null) card.append(node("p", `Score ${assignment.score}%`));
+      if (assignment.learner === session.member_id && assignment.status === "assigned") {
+        card.append(node("p", course.lesson), node("h3", course.question));
+        course.choices.forEach((choice, index) => {
+          const button = node("button", choice, "secondary");
+          button.type = "button";
+          button.addEventListener("click", async () => {
+            try {
+              const result = await request(`/learning/assignments/${assignment.id}/answer`, "POST", { choice: index });
+              await load.training();
+              showNotice(result.status === "completed" ? "Training completed." : "Review the lesson and try again.");
+            } catch (error) { showNotice(error.message); }
+          });
+          card.append(button);
+        });
+      }
+      return card;
+    })));
+    byId("learning-assign-button").disabled = false;
     byId("training-completion").hidden = !session.member_id;
     byId("course-list").replaceChildren(...courses.map((course) => {
       const section = node("section", undefined, "card");
-      section.append(node("h2", course.title), node("p", `Version ${course.version}`), list(course.lessons));
+      section.append(node("h2", course.title), node("p", course.lesson));
       return section;
     }));
   },
@@ -707,6 +842,7 @@ onSubmit("login-form", async ({ key, credential }, form) => {
 
 async function enterWorkspace() {
   for (const element of document.querySelectorAll("[data-write]")) element.hidden = session.role !== "editor";
+  byId("executive-link").hidden = !session.member_id || !["editor", "auditor", "publisher"].includes(session.role);
   byId("audit-link").hidden = session.role !== "auditor";
   byId("directory-link").hidden = session.role !== "identity_admin";
   byId("login").hidden = true;
@@ -817,6 +953,35 @@ async function loadTrend() {
     report.trend.map((row) => [row.day, row.risk, row.total]), "No reports match these filters.");
 }
 onSubmit("trend-form", loadTrend);
+onSubmit("board-form", async ({ department, ...scope }) => {
+  await request("/board-reports", "POST", { ...scope, department: department || null });
+  await load.executive();
+});
+onSubmit("board-schedule", async ({ enabled, days }) => {
+  await request("/board-reports/schedule", "PUT", { enabled: Boolean(enabled), days: Number(days) });
+  await load.executive();
+  showNotice("Report schedule saved.");
+});
+onSubmit("enrolment-rule", async ({ id, enabled, group, due_days, refresher_days, ...rule }) => {
+  await request(`/learning/enrolment-rules/${encodeURIComponent(id)}`, "PUT", {
+    ...rule, enabled: Boolean(enabled), group: group || null, due_days: Number(due_days),
+    refresher_days: refresher_days ? Number(refresher_days) : null,
+  });
+  await load.training();
+  showNotice("Enrolment rule saved.");
+});
+onSubmit("course-editor", async ({ course_id, revision, correct_choice, first, second, ...draft }, form) => {
+  const saved = await request(`/learning/course-drafts/${encodeURIComponent(course_id)}`, "PUT", {
+    ...draft, choices: [first, second], correct_choice: Number(correct_choice), expected_revision: Number(revision),
+  });
+  form.elements.namedItem("revision").value = saved.revision;
+  await load.training();
+  showNotice("Course draft saved.");
+});
+onSubmit("learning-assign", async (assignment) => {
+  await request("/learning/assignments", "POST", assignment);
+  await load.training();
+});
 onSubmit("training-form", async ({ id }) => {
   await request(`/training/assignments/${encodeURIComponent(id)}/complete`, "POST");
   showNotice("Course completion recorded.");

@@ -22,6 +22,11 @@ def main():
                 "incident-alerts",
                 "workspace-discovery",
                 "security-detections",
+                "board-reports",
+                "learning/enrolments",
+                "learning",
+                "reassessments",
+                "audit-exporter",
                 "notifications",
             ):
                 try:
