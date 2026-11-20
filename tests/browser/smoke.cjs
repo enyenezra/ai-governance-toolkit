@@ -49,6 +49,11 @@ async function main() {
     await page.getByRole("cell", { name: "Browser fixture provider" }).waitFor();
     await assertAccessible(page);
 
+    await page.getByRole("link", { name: "Security findings" }).click();
+    await page.getByRole("button", { name: "Run detections" }).click();
+    await page.getByText("0 new findings · 0 new incidents.").waitFor();
+    await assertAccessible(page);
+
     await page.getByRole("link", { name: "Connected discovery" }).click();
     await page.getByRole("heading", { name: "Google Workspace" }).waitFor();
     await assertAccessible(page);

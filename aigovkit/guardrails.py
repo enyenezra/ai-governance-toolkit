@@ -1,5 +1,6 @@
 """A deny-by-default policy decision gate for trusted runtime callers."""
 
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
@@ -222,7 +223,14 @@ def gateway(request: Simulation, actor: Actor, store: Store) -> JSONResponse:
             )
             state = get(cursor, "guardrail_current", request.agent_id)
             decision, reason = "deny", "No active rule covers this request."
-            if state and state["suspended"]:
+            restriction = get(cursor, "containment_active", request.agent_id)
+            containment_id = None
+            if restriction and datetime.fromisoformat(
+                restriction["expires_at"]
+            ) > datetime.now(UTC):
+                containment_id = restriction["id"]
+                reason = "An approved temporary restriction is active."
+            elif state and state["suspended"]:
                 reason = "This agent is suspended at the AIGovKit gate."
             elif state and state["revision_id"]:
                 ids = state.get("revision_ids", [state["revision_id"]])
@@ -254,6 +262,8 @@ def gateway(request: Simulation, actor: Actor, store: Store) -> JSONResponse:
             evidence = {
                 "id": uuid4().hex,
                 "agent_id": request.agent_id,
+                "action": request.action,
+                "containment_id": containment_id,
                 "decision": decision,
                 "reason": reason,
                 "deployment_version": state["version"] if state else None,

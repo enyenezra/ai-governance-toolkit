@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from aigovkit.access_workflow import router as access_router
 from aigovkit.api import router
 from aigovkit.assurance import router as assurance_router
+from aigovkit.containment import router as containment_router
 from aigovkit.device_discovery import router as device_router
 from aigovkit.enterprise import router as enterprise_router
 from aigovkit.foundation import router as foundation_router
@@ -31,6 +32,7 @@ app.include_router(device_router)
 app.include_router(workspace_discovery_router)
 app.include_router(sso_router)
 app.include_router(gate_router)
+app.include_router(containment_router)
 app.include_router(provider_router)
 app.include_router(automation_router)
 app.include_router(output_router)

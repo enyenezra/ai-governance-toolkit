@@ -17,7 +17,12 @@ def main():
             headers=headers, timeout=180, follow_redirects=False, trust_env=False
         ) as client:
             results = {}
-            for task in ("review-reminders", "incident-alerts", "workspace-discovery"):
+            for task in (
+                "review-reminders",
+                "incident-alerts",
+                "workspace-discovery",
+                "security-detections",
+            ):
                 try:
                     result = client.post(f"{base}/v1/{task}/run")
                     result.raise_for_status()

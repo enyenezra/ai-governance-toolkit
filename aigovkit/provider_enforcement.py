@@ -272,6 +272,10 @@ def decide(
         "provider_id": provider_id,
         "version": current["version"] if current else None,
         "model": request.model,
+        "agent_id": request.scope.agent_id,
+        "reason_code": "model_not_allowlisted"
+        if scope_check is None
+        else "scope_evaluated",
         "decision": "allow" if permit else "deny",
         "reason": reason,
         "scope_check": scope_check,
@@ -287,6 +291,7 @@ def decide(
             if (latest["version"] if latest else None) != body["version"]:
                 body.update(
                     decision="deny",
+                    reason_code="deployment_changed",
                     reason="Provider deployment changed during evaluation.",
                 )
             insert(cursor, "provider_check", body["id"], body)

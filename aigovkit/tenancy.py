@@ -111,6 +111,7 @@ def authorize_member(request: Request, session: Session) -> Session:
             "/v1/review-reminders/run",
             "/v1/incident-alerts/run",
             "/v1/workspace-discovery/run",
+            "/v1/security-detections/run",
         }:
             raise HTTPException(
                 403, "Scheduler credentials can only run scheduled jobs."
@@ -154,7 +155,11 @@ def authorize_member(request: Request, session: Session) -> Session:
         request.method == "POST"
         and session.role == "publisher"
         and request.url.path.startswith(
-            ("/v1/provider-deployments/", "/v1/provider-verifications/")
+            (
+                "/v1/provider-deployments/",
+                "/v1/provider-verifications/",
+                "/v1/containment/",
+            )
         )
     )
     allowed_directory = (

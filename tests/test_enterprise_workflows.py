@@ -489,6 +489,10 @@ def test_provider_governance_adapter_blocks_models_and_verifies_current_version(
         ).status_code
         == 422
     )
+    assert editor.post("/v1/security-detections/run").json()["findings_created"] == 1
+    assert (
+        editor.get("/v1/security-findings").json()[0]["rule"] == "model_not_allowlisted"
+    )
     assert received == ["private prompt"]
     assert editor.get("/v1/provider-checks/fixture").status_code == 403
     checks = publisher.get("/v1/provider-checks/fixture").json()
@@ -521,3 +525,112 @@ def test_provider_governance_adapter_blocks_models_and_verifies_current_version(
         publisher.post("/v1/provider-verifications/fixture", json=evidence).status_code
         == 422
     )
+
+
+def test_detection_and_temporary_containment(tenant, monkeypatch):
+    import psycopg
+
+    editor, publisher, gateway = (
+        tenant[key] for key in ("editor", "publisher", "gateway")
+    )
+    rule = editor.post(
+        "/v1/guardrail-rules", json={"scope": SCENARIO, "decision": "allow"}
+    ).json()
+    assert (
+        publisher.post(
+            "/v1/guardrail-deployments",
+            json={
+                "agent_id": "helper",
+                "revision_id": rule["id"],
+                "operation": "deploy",
+                "expected_version": 0,
+            },
+        ).status_code
+        == 200
+    )
+    route = "/v1/guardrail-checks"
+    for _ in range(3):
+        assert (
+            gateway.post(route, json=SCENARIO | {"action": "admin"}).status_code == 403
+        )
+    submitted = editor.post("/v1/security-detections/run")
+    assert submitted.status_code == 200
+    assert submitted.json() == {"findings_created": 2, "incidents_created": 1}
+    assert editor.post("/v1/security-detections/run").json()["findings_created"] == 0
+    findings = {row["rule"]: row for row in editor.get("/v1/security-findings").json()}
+    high = findings["privileged_action_denied"]
+    assert len(high["evidence_ids"]) == 3
+    assert editor.get("/v1/registers/incident").json()[0]["evidence_references"] == [
+        high["id"]
+    ]
+    data = {"finding_id": high["id"], "minutes": 15}
+    assert editor.post("/v1/containment", json=data).json()["status"] == "preview"
+    assert editor.get("/v1/containment").json() == []
+    assert gateway.post(route, json=SCENARIO).status_code == 200
+    assert (
+        editor.post("/v1/containment", json=data | {"dry_run": False}).status_code
+        == 200
+    )
+    action = "/v1/containment/" + high["id"] + "/transition"
+    assert publisher.post(action, json={"action": "execute"}).status_code in {403, 409}
+    assert editor.post(action, json={"action": "approve"}).status_code == 403
+    assert (
+        publisher.post(action, json={"action": "approve"}).json()["status"]
+        == "approved"
+    )
+    assert publisher.post(action, json={"action": "execute"}).status_code == 403
+    monkeypatch.setenv("AIGOVKIT_CONTAINMENT_ENABLED", "yes")
+    active = publisher.post(action, json={"action": "execute"})
+    assert active.status_code == 200
+    assert publisher.post(action, json={"action": "execute"}).json() == active.json()
+    denied = gateway.post(route, json=SCENARIO)
+    assert denied.status_code == 403 and denied.json()["containment_id"] == high["id"]
+    monkeypatch.setenv("AIGOVKIT_CONTAINMENT_ENABLED", "no")
+    assert (
+        publisher.post(action, json={"action": "rollback"}).json()["status"]
+        == "rolled_back"
+    )
+    assert gateway.post(route, json=SCENARIO).status_code == 200
+
+    monkeypatch.setenv("AIGOVKIT_CONTAINMENT_ENABLED", "yes")
+    other = findings["repeated_gate_denials"]["id"]
+    assert (
+        editor.post(
+            "/v1/containment",
+            json={"finding_id": other, "minutes": 1, "dry_run": False},
+        ).status_code
+        == 200
+    )
+    other_route = "/v1/containment/" + other + "/transition"
+    for op in ("approve", "execute"):
+        assert publisher.post(other_route, json={"action": op}).status_code == 200
+
+    # Move only the disposable test restriction into the past instead of sleeping.
+    dsn = os.environ["AIGOVKIT_TEST_DATABASE_URL"]
+    tenant_id = editor.get("/v1/session").json()["organisation_id"]
+    schema = schema_for(tenant_id)
+    with psycopg.connect(dsn) as conn:
+        conn.execute(
+            psycopg.sql.SQL("SET search_path TO {}").format(
+                psycopg.sql.Identifier(schema)
+            )
+        )
+        conn.execute(
+            """UPDATE foundation_documents SET body=jsonb_set(body,'{expires_at}',to_jsonb(%s::text))
+               WHERE kind IN ('containment_active','containment_request') AND body->>'id'=%s""",
+            ("2000-01-01T00:00:00+00:00", other),
+        )
+    assert gateway.post(route, json=SCENARIO).status_code == 200
+    assert any(
+        row["id"] == other and row["status"] == "expired"
+        for row in editor.get("/v1/containment").json()
+    )
+    auditor = tenant["auditor"]
+    actions = {
+        row["action"] for row in auditor.get("/v1/audit-events?limit=100").json()
+    }
+    assert {
+        "containment.execute",
+        "containment.execute_rejected",
+        "containment.rollback",
+    } <= actions
