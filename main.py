@@ -64,7 +64,7 @@ async def protect_sensitive_responses(request: Request, call_next):
     return response
 
 
-WORKSPACE_CSP = (
+BROWSER_CSP = (
     "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
     "object-src 'none'; form-action 'self'"
 )
@@ -93,13 +93,15 @@ class AssessmentResult(BaseModel):
 
 @app.get("/", include_in_schema=False)
 def assessment_page() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+    return FileResponse(
+        WEB_DIR / "index.html", headers={"Content-Security-Policy": BROWSER_CSP}
+    )
 
 
 @app.get("/workspace", include_in_schema=False)
 def workspace_page() -> FileResponse:
     return FileResponse(
-        WEB_DIR / "workspace.html", headers={"Content-Security-Policy": WORKSPACE_CSP}
+        WEB_DIR / "workspace.html", headers={"Content-Security-Policy": BROWSER_CSP}
     )
 
 

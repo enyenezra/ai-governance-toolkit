@@ -29,9 +29,11 @@ DRAFT = {
 
 def test_workspace_assets():
     client = TestClient(app)
-    assert "Executive governance dashboard" in client.get("/workspace").text
-    assert client.get("/assets/workspace.js").status_code == 200
-    assert client.get("/").status_code == 200
+    for path, script in (("/", "assessment.js"), ("/workspace", "workspace.js")):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert f"/assets/generated/{script}" in response.text
+        assert "default-src 'self'" in response.headers["Content-Security-Policy"]
 
 
 def test_invalid_explicit_tenant_config_does_not_fall_back(monkeypatch):

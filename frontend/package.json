@@ -1,0 +1,14 @@
+{
+  "name": "aigovkit-frontend",
+  "private": true,
+  "scripts": {
+    "build": "esbuild assessment.jsx workspace.jsx --bundle --minify --jsx=automatic --outdir=../web/generated"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

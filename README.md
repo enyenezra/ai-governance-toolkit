@@ -58,9 +58,12 @@ database volume when you run `docker compose down`. Keep the database password
 in a secure location and reuse it when restarting an existing volume. The sample
 import replaces records with matching kinds and IDs. Use it only for demo data.
 
+The risk assessment and governance workspace are built with React. Docker
+compiles both pages as part of the image build.
+
 ### Run the API directly
 
-Use Python 3.13 and Docker with its daemon running. Run these commands from the
+Use Python 3.13, Node.js 24 with npm, and Docker with its daemon running. Run these commands from the
 repository root in the same terminal. The database and API bind to loopback.
 Use a fresh container and synthetic data for the demo.
 
@@ -68,6 +71,8 @@ Use a fresh container and synthetic data for the demo.
 python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
+npm ci --prefix frontend
+npm run build --prefix frontend
 
 export POSTGRES_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 export AIGOVKIT_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"

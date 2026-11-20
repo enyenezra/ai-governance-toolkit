@@ -7,3 +7,10 @@
 !web/*
 !examples
 !examples/*.json
+
+!frontend
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/*.jsx
+!frontend/workspace-controller.js
+web/generated
