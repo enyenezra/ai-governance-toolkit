@@ -272,6 +272,14 @@ local credentials and is ignored by Git.
 
 See the [pilot checklist](docs/pilot-checklist.md) and [backup and restore guide](docs/backup-restore.md).
 
+## Executive reporting, learning and audit export
+
+Create scoped executive snapshots, schedule daily reports and export them
+as JSON, CSV, PDF or DOCX. Assign versioned AI literacy lessons with
+server-graded quizzes. Forward selected audit metadata to an approved
+signed webhook, with retry history and saved batches for recovery.
+See [operator setup and feature scope](docs/reporting-learning-export.md).
+
 ## Phase 2 provider enforcement
 
 See the [repository audit and backlog](docs/phase2.md) and the

@@ -9,11 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from aigovkit.access_workflow import router as access_router
 from aigovkit.api import router
 from aigovkit.assurance import router as assurance_router
+from aigovkit.audit_exporter import router as exporter_router
+from aigovkit.board_reporting import router as board_router
 from aigovkit.containment import router as containment_router
 from aigovkit.device_discovery import router as device_router
 from aigovkit.enterprise import router as enterprise_router
 from aigovkit.foundation import router as foundation_router
 from aigovkit.guardrails import router as gate_router
+from aigovkit.learning import router as learning_router
 from aigovkit.notifications import router as notifications_router
 from aigovkit.operations_automation import router as automation_router
 from aigovkit.policy_outputs import router as output_router
@@ -27,6 +30,9 @@ from aigovkit.workspace_discovery import router as workspace_discovery_router
 app = FastAPI(title="AI Governance Toolkit", version="0.1.0")
 app.include_router(router)
 app.include_router(assurance_router)
+app.include_router(board_router)
+app.include_router(learning_router)
+app.include_router(exporter_router)
 app.include_router(access_router)
 app.include_router(enterprise_router)
 app.include_router(device_router)

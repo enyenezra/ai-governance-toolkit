@@ -39,6 +39,7 @@ class SMTP(StrictModel):
 
 class Destinations(StrictModel):
     webhook: Webhook | None = None
+    audit_webhook: Webhook | None = None
     smtp: SMTP | None = None
 
 
@@ -58,8 +59,10 @@ def configured(tenant: str | None) -> Destinations:
     except ValidationError as error:
         raise ValueError("Invalid notification configuration.") from error
     result = tenants.get(tenant, Destinations())
-    if result.webhook:
-        uri = urlsplit(result.webhook.url)
+    for destination in (result.webhook, result.audit_webhook):
+        if not destination:
+            continue
+        uri = urlsplit(destination.url)
         if (
             uri.scheme != "https"
             or not uri.hostname

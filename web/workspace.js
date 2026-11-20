@@ -597,12 +597,87 @@ const load = {
     }));
   },
   devices: () => loadDevices(0),
+  async executive() {
+    if (!session.member_id || !["editor", "auditor", "publisher"].includes(session.role)) {
+      throw new Error("Executive reports require a named governance role.");
+    }
+    const reports = await request("/board-reports");
+    byId("board-list").replaceChildren(...reports.map((report) => {
+      const card = node("section", undefined, "card");
+      const { start, end, template } = report.scope;
+      card.append(node("h2", `${template} · ${start} to ${end}`),
+        node("p", `${report.metrics.assessments} assessments · ${report.metrics.high_risk_assessments} high risk`),
+        list(report.recommended_actions));
+      for (const format of ["json", "csv", "pdf", "docx"]) {
+        const button = node("button", `Download ${format.toUpperCase()}`, "secondary");
+        button.type = "button";
+        button.addEventListener("click", async () => {
+          try {
+            const result = await fetch(`/v1/board-reports/${encodeURIComponent(report.id)}/export/${format}`,
+              { headers: authHeaders(), cache: "no-store" });
+            if (!result.ok) throw new Error("Report download failed.");
+            const url = URL.createObjectURL(await result.blob());
+            const link = node("a");
+            link.href = url;
+            link.download = `aigovkit-${report.id}.${format}`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          } catch (error) { showNotice(error.message); }
+        });
+        card.append(button);
+      }
+      return card;
+    }));
+    if (!reports.length) byId("board-list").append(node("p", "No executive reports yet."));
+    if (session.role === "editor") {
+      const schedule = await request("/board-reports/schedule");
+      const fields = byId("board-schedule").elements;
+      fields.namedItem("enabled").checked = schedule.enabled;
+      fields.namedItem("days").value = schedule.days;
+    }
+    const canInspect = ["editor", "auditor"].includes(session.role);
+    byId("export-history-panel").hidden = !canInspect;
+    if (canInspect) {
+      const history = await request("/audit-exporter/history");
+      table("export-history", ["Batch", "State", "Attempts", "Last error"], history.map((row) => [
+        row.batch_id, row.state, row.attempts, row.last_error,
+      ]));
+    }
+  },
   async training() {
-    const courses = await request("/training/courses");
+    const courses = await request("/learning/courses");
+    byId("learning-course-select").replaceChildren(...courses.map((course) => {
+      const option = node("option", course.title);
+      option.value = course.id;
+      return option;
+    }));
+    const assignments = session.member_id ? await request("/learning/assignments") : [];
+    byId("learning-assignments").replaceChildren(...assignments.map((assignment) => {
+      const course = courses.find((entry) => entry.id === assignment.course_id);
+      const card = node("section", undefined, "card");
+      card.append(node("h2", course.title), node("p", `${assignment.learner} · Due ${assignment.due} · ${assignment.status}`));
+      if (assignment.score !== null) card.append(node("p", `Score ${assignment.score}%`));
+      if (assignment.learner === session.member_id && assignment.status === "assigned") {
+        card.append(node("p", course.lesson), node("h3", course.question));
+        course.choices.forEach((choice, index) => {
+          const button = node("button", choice, "secondary");
+          button.type = "button";
+          button.addEventListener("click", async () => {
+            try {
+              const result = await request(`/learning/assignments/${assignment.id}/answer`, "POST", { choice: index });
+              await load.training();
+              showNotice(result.status === "completed" ? "Training completed." : "Review the lesson and try again.");
+            } catch (error) { showNotice(error.message); }
+          });
+          card.append(button);
+        });
+      }
+      return card;
+    }));
     byId("training-completion").hidden = !session.member_id;
     byId("course-list").replaceChildren(...courses.map((course) => {
       const section = node("section", undefined, "card");
-      section.append(node("h2", course.title), node("p", `Version ${course.version}`), list(course.lessons));
+      section.append(node("h2", course.title), node("p", course.lesson));
       return section;
     }));
   },
@@ -707,6 +782,7 @@ onSubmit("login-form", async ({ key, credential }, form) => {
 
 async function enterWorkspace() {
   for (const element of document.querySelectorAll("[data-write]")) element.hidden = session.role !== "editor";
+  byId("executive-link").hidden = !session.member_id || !["editor", "auditor", "publisher"].includes(session.role);
   byId("audit-link").hidden = session.role !== "auditor";
   byId("directory-link").hidden = session.role !== "identity_admin";
   byId("login").hidden = true;
@@ -817,6 +893,19 @@ async function loadTrend() {
     report.trend.map((row) => [row.day, row.risk, row.total]), "No reports match these filters.");
 }
 onSubmit("trend-form", loadTrend);
+onSubmit("board-form", async ({ department, ...scope }) => {
+  await request("/board-reports", "POST", { ...scope, department: department || null });
+  await load.executive();
+});
+onSubmit("board-schedule", async ({ enabled, days }) => {
+  await request("/board-reports/schedule", "PUT", { enabled: Boolean(enabled), days: Number(days) });
+  await load.executive();
+  showNotice("Report schedule saved.");
+});
+onSubmit("learning-assign", async (assignment) => {
+  await request("/learning/assignments", "POST", assignment);
+  await load.training();
+});
 onSubmit("training-form", async ({ id }) => {
   await request(`/training/assignments/${encodeURIComponent(id)}/complete`, "POST");
   showNotice("Course completion recorded.");

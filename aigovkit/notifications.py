@@ -9,9 +9,16 @@ from psycopg.types.json import Jsonb
 from pydantic import Field
 
 from aigovkit.api import Store
+from aigovkit.audit_exporter import ACTION as AUDIT_BATCH
 from aigovkit.foundation import Actor, Limit, Offset, database_call
 from aigovkit.models import StrictModel
-from aigovkit.notification_delivery import DeliveryFailure, configured, deliver
+from aigovkit.notification_delivery import (
+    DeliveryFailure,
+    configured,
+    deliver,
+    deliver_webhook,
+    packet,
+)
 from aigovkit.notification_outbox import CHANNELS, EVENT_PRIORITIES, PRIORITIES
 from aigovkit.policy_review import named_member
 from aigovkit.tenancy import authenticate
@@ -96,10 +103,20 @@ def notifications(
                 """
                 SELECT event_id,channel,action,priority,resource_type,resource_id,resource_version,
                        created_at,state,attempts,next_attempt_at,last_error,delivered_at
-                FROM notification_outbox WHERE channel='in_app' OR %s
+                FROM notification_outbox AS delivery
+                WHERE %s OR (
+                    channel='in_app' AND (
+                        action <> 'learning.reminder' OR EXISTS (
+                            SELECT 1 FROM foundation_documents AS assignment
+                            WHERE assignment.kind='learning_assignment'
+                              AND assignment.id=delivery.resource_id
+                              AND assignment.body->>'learner'=%s
+                        )
+                    )
+                )
                 ORDER BY event_id DESC,channel LIMIT %s OFFSET %s
                 """,
-                (can_inspect, limit, offset),
+                (can_inspect, actor.member, limit, offset),
             ).fetchall()
 
     return database_call(read)
@@ -211,13 +228,26 @@ def dispatch(store: Store, actor: Actor) -> dict:
             database_call(store.get_document, "notification_settings", "default")
             or Preferences().model_dump()
         )
-        if not delivery_allowed(item, prefs):
+        is_export = item["action"] == AUDIT_BATCH
+        if not is_export and not delivery_allowed(item, prefs):
             if database_call(finish, store, item, "cancelled", "delivery_disabled"):
                 summary["cancelled"] += 1
             continue
         outcome, error = "delivered", None
         try:
-            deliver(config, actor.tenant, item)
+            if is_export:
+                if not config.audit_webhook:
+                    raise DeliveryFailure("audit_destination_disabled", retry=False)
+                batch = database_call(
+                    store.get_document, "audit_export_batch", item["resource_id"]
+                )
+                if not batch:
+                    raise DeliveryFailure("audit_batch_missing", retry=False)
+                deliver_webhook(
+                    config.audit_webhook, {**packet(actor.tenant, item), "batch": batch}
+                )
+            else:
+                deliver(config, actor.tenant, item)
         except DeliveryFailure as failure:
             outcome = (
                 "queued"

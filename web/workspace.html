@@ -12,6 +12,7 @@
     <a class="brand" href="#overview"><span aria-hidden="true">◆</span> AIGovKit</a>
     <nav aria-label="Workspace">
       <a href="#overview">Governance dashboard</a>
+      <a href="#executive" id="executive-link" hidden>Executive reports</a>
       <a href="#organisation">Organisation setup</a>
       <a href="#inventory">AI systems &amp; agents</a>
       <a href="#readiness">Readiness assessment</a>
@@ -331,8 +332,36 @@
             <button type="button" id="device-older" class="secondary" hidden>Next page</button>
           </section>
         </section>
+        <section id="executive" class="page" hidden>
+          <h1>Executive reports</h1>
+          <section class="card" data-write>
+            <form id="board-form">
+              <label>Period start <input name="start" type="date" required></label>
+              <label>Period end <input name="end" type="date" required></label>
+              <label>Department ID <input name="department"></label>
+              <label>Template <select name="template"><option value="board">Board</option><option value="risk">Risk</option><option value="security">Security</option><option value="operations">Operations</option></select></label>
+              <button>Generate report</button>
+            </form>
+            <form id="board-schedule">
+              <label class="check"><input name="enabled" type="checkbox"> Generate a report daily</label>
+              <label>Days to include <input name="days" type="number" min="1" max="366" value="30" required></label>
+              <button>Save schedule</button>
+            </form>
+          </section>
+          <div id="board-list"></div>
+          <section id="export-history-panel" class="card" hidden><h2>Audit export delivery</h2><div id="export-history"></div></section>
+        </section>
         <section id="training" class="page" hidden>
           <h1>Training courses</h1>
+          <section class="card" data-write>
+            <form id="learning-assign">
+              <label>Course <select name="course_id" id="learning-course-select" required></select></label>
+              <label>Learner member ID <input name="learner" required></label>
+              <label>Due date <input name="due" type="date" required></label>
+              <button>Assign training</button>
+            </form>
+          </section>
+          <div id="learning-assignments"></div>
           <div id="course-list"></div>
           <section class="card" id="training-completion" hidden><h2>Record course completion</h2>
             <form id="training-form"><label>Assignment ID <input name="id" required></label>
