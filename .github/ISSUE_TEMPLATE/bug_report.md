@@ -1,6 +1,10 @@
 ---
 name: Bug report
 about: Report incorrect behaviour with a synthetic example
+title: ''
+labels: ''
+assignees: ''
+
 ---
 
 ### Version and environment
