@@ -37,9 +37,27 @@ class SMTP(StrictModel):
     password: SecretStr | None = None
 
 
+class AuditSink(StrictModel):
+    url: str
+    token: SecretStr | None = None
+
+
 class Destinations(StrictModel):
     webhook: Webhook | None = None
     audit_webhook: Webhook | None = None
+    audit_otlp: AuditSink | None = None
+    audit_splunk: AuditSink | None = None
+
+    def audit_transport(self):
+        return next(
+            (
+                name
+                for name in ("audit_webhook", "audit_otlp", "audit_splunk")
+                if getattr(self, name)
+            ),
+            None,
+        )
+
     smtp: SMTP | None = None
 
 
@@ -59,7 +77,22 @@ def configured(tenant: str | None) -> Destinations:
     except ValidationError as error:
         raise ValueError("Invalid notification configuration.") from error
     result = tenants.get(tenant, Destinations())
-    for destination in (result.webhook, result.audit_webhook):
+    if (
+        sum(
+            item is not None
+            for item in (result.audit_webhook, result.audit_otlp, result.audit_splunk)
+        )
+        > 1
+    ):
+        raise ValueError("Configure one audit destination per tenant.")
+    if result.audit_splunk and not result.audit_splunk.token:
+        raise ValueError("Splunk HEC requires a token.")
+    for destination in (
+        result.webhook,
+        result.audit_webhook,
+        result.audit_otlp,
+        result.audit_splunk,
+    ):
         if not destination:
             continue
         uri = urlsplit(destination.url)

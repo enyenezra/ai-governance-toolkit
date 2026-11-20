@@ -23,7 +23,9 @@ def main():
                 "workspace-discovery",
                 "security-detections",
                 "board-reports",
+                "learning/enrolments",
                 "learning",
+                "reassessments",
                 "audit-exporter",
                 "notifications",
             ):

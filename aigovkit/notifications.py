@@ -10,6 +10,7 @@ from pydantic import Field
 
 from aigovkit.api import Store
 from aigovkit.audit_exporter import ACTION as AUDIT_BATCH
+from aigovkit.audit_transports import deliver_audit
 from aigovkit.foundation import Actor, Limit, Offset, database_call
 from aigovkit.models import StrictModel
 from aigovkit.notification_delivery import (
@@ -236,16 +237,19 @@ def dispatch(store: Store, actor: Actor) -> dict:
         outcome, error = "delivered", None
         try:
             if is_export:
-                if not config.audit_webhook:
-                    raise DeliveryFailure("audit_destination_disabled", retry=False)
                 batch = database_call(
                     store.get_document, "audit_export_batch", item["resource_id"]
                 )
                 if not batch:
                     raise DeliveryFailure("audit_batch_missing", retry=False)
-                deliver_webhook(
-                    config.audit_webhook, {**packet(actor.tenant, item), "batch": batch}
-                )
+                transport = batch.get("transport", "audit_webhook")
+                if transport != config.audit_transport():
+                    raise DeliveryFailure("audit_destination_disabled", retry=False)
+                event = {**packet(actor.tenant, item), "batch": batch}
+                if transport == "audit_webhook":
+                    deliver_webhook(config.audit_webhook, event)
+                else:
+                    deliver_audit(getattr(config, transport), transport, event)
             else:
                 deliver(config, actor.tenant, item)
         except DeliveryFailure as failure:

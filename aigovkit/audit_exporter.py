@@ -17,7 +17,14 @@ from aigovkit.policy_review import named_member
 from aigovkit.tenancy import authenticate
 
 router = APIRouter(prefix="/v1/audit-exporter", dependencies=[Depends(authenticate)])
-PREFIXES = ("security.", "containment.", "report.", "learning.", "provider.")
+PREFIXES = (
+    "security.",
+    "containment.",
+    "report.",
+    "learning.",
+    "provider.",
+    "reassessment.",
+)
 ACTION = "audit_export.batch"
 
 
@@ -25,12 +32,12 @@ ACTION = "audit_export.batch"
 def queue_batch(store: Store, actor: Actor) -> dict:
     named_member(actor, "scheduler")
     try:
-        enabled = configured(actor.tenant).audit_webhook is not None
+        transport = configured(actor.tenant).audit_transport()
     except ValueError:
         raise HTTPException(
             503, "Audit destination configuration is invalid."
         ) from None
-    if not enabled:
+    if not transport:
         return {"state": "disabled", "events": 0}
 
     def queue():
@@ -61,6 +68,7 @@ def queue_batch(store: Store, actor: Actor) -> dict:
             batch = {
                 "schema_version": "1.0.0",
                 "batch_id": batch_id,
+                "transport": transport,
                 "events": [
                     {**row, "occurred_at": row["occurred_at"].isoformat()}
                     for row in rows

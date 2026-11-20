@@ -277,7 +277,9 @@ See the [pilot checklist](docs/pilot-checklist.md) and [backup and restore guide
 Create scoped executive snapshots, schedule daily reports and export them
 as JSON, CSV, PDF or DOCX. Assign versioned AI literacy lessons with
 server-graded quizzes. Forward selected audit metadata to an approved
-signed webhook, with retry history and saved batches for recovery.
+signed webhook, OpenTelemetry collector, or Splunk HEC endpoint. Editors can
+submit courses for independent publication, configure enrolment and refreshers,
+and queue risk, vendor, and control reassessments through the existing scheduler.
 See [operator setup and feature scope](docs/reporting-learning-export.md).
 
 ## Phase 2 provider enforcement

@@ -85,8 +85,8 @@ class Answer(StrictModel):
 
 
 @router.get("/courses")
-def courses() -> list[dict]:
-    return [
+def courses(store: Store, offset: Offset = 0, limit: Limit = 100) -> list[dict]:
+    bundled = [
         {
             "id": key,
             "title": title,
@@ -97,12 +97,45 @@ def courses() -> list[dict]:
         for key, (title, lesson, question, choices, _) in COURSES.items()
     ]
 
+    published = database_call(store.documents, "course_version", offset, limit)
+    return bundled + [
+        {key: row[key] for key in ("id", "title", "lesson", "question", "choices")}
+        for row in published
+    ]
+
+
+def course_answer(conn, course_id):
+    if course_id in COURSES:
+        return COURSES[course_id][-1]
+    row = conn.execute(
+        "SELECT body->'correct_choice' FROM foundation_documents WHERE kind='course_version' AND id=%s",
+        (course_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Course version not found.")
+    return row[0]
+
+
+@router.get("/courses/{course_id}")
+def course(course_id: Identifier, store: Store):
+    if course_id in COURSES:
+        title, lesson, question, choices, _ = COURSES[course_id]
+        return {
+            "id": course_id,
+            "title": title,
+            "lesson": lesson,
+            "question": question,
+            "choices": choices,
+        }
+    row = database_call(store.get_document, "course_version", course_id)
+    if row is None:
+        raise HTTPException(404, "Course version not found.")
+    return {key: row[key] for key in ("id", "title", "lesson", "question", "choices")}
+
 
 @router.post("/assignments", status_code=201)
 def assign(request: Assignment, store: Store, actor: Actor) -> dict:
     named_member(actor, "editor")
-    if request.course_id not in COURSES:
-        raise HTTPException(404, "Course version not found.")
     if request.due < datetime.now(UTC).date():
         raise HTTPException(422, "Select a current or future due date.")
     data = {
@@ -122,6 +155,10 @@ def assign(request: Assignment, store: Store, actor: Actor) -> dict:
 
     def save():
         with store.connect() as conn:
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':enrolment', 0))"
+            )
+            course_answer(conn, request.course_id)
             if (
                 request.learner not in configured_learners
                 and not conn.execute(
@@ -131,6 +168,15 @@ def assign(request: Assignment, store: Store, actor: Actor) -> dict:
                 ).fetchone()
             ):
                 raise HTTPException(404, "Active learner not found.")
+            if conn.execute(
+                """SELECT 1 FROM foundation_documents WHERE kind='learning_assignment'
+                   AND body->>'learner'=%s AND body->>'course_id'=%s AND body->>'status'='assigned'
+                   LIMIT 1""",
+                (request.learner, request.course_id),
+            ).fetchone():
+                raise HTTPException(
+                    409, "This learner already has an open assignment for the course."
+                )
             conn.execute(
                 "INSERT INTO foundation_documents (kind,id,body) VALUES ('learning_assignment',%s,%s)",
                 (data["id"], Jsonb(data)),
@@ -180,7 +226,7 @@ def answer(assignment_id: Identifier, request: Answer, store: Store, actor: Acto
             if data["status"] == "completed":
                 return data
             data["score"] = (
-                100 if request.choice == COURSES[data["course_id"]][-1] else 0
+                100 if request.choice == course_answer(conn, data["course_id"]) else 0
             )
             if data["score"] == 100:
                 data["status"] = "completed"

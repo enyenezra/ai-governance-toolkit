@@ -78,9 +78,56 @@ through your deployment scheduler often enough to drain the shared
 delivery queue. You need an approved destination and a live pilot to
 verify delivery in your environment.
 
-The initial reporting templates use structured application records and
-cover a limited set of metrics. Learning is an introductory catalogue
-with manual assignments, one graded question per course and a due-date
-reminder. Automatic role or risk-based enrolment, configurable refreshers,
-in-product course authoring, native SIEM and OpenTelemetry adapters, and
-additional recurring reassessment jobs remain future work.
+## Governance automation
+
+Executive report version 1.1 adds live snapshot counts from the risk, access,
+incident, vendor, control, policy and training records. Each source indicates
+whether it has records. Policy acknowledgements count receipts for the latest
+published versions. Existing snapshots keep their original metrics. Department
+filters apply to historical assessments.
+
+Named editors can create and edit course drafts in **Training courses**. Named
+publishers can review the current draft and publish it from the same page.
+Assignments retain the published version they started with. The learner
+catalogue excludes the answer key. Custom courses currently use one graded
+question and two choices.
+
+Editors can create an enrolment rule for a published course version, a member
+role and optionally a managed directory group. A scheduler run assigns up to
+100 eligible members. It skips open assignments and starts refreshers after
+the specified interval from the last completion. Set the rule to disabled to
+stop future enrolment. Published course versions are explicit in each rule.
+A new version requires an editor to update the rule. Enrolment uses the
+current directory records available to AIGovKit.
+
+The scheduler also queues risk treatment reviews and vendor reassessments
+when a source due date arrives. It queues control reviews 90 days after the
+most recent check. A source record and due date produce one task. Reviewers
+resolve the underlying work in the source registers and advance the due date
+or record newer evidence there. Tasks are historical evidence that a review
+became due. The scheduler does not change permissions or risk decisions.
+
+## Native audit sinks
+
+Configure one audit destination per tenant in
+`AIGOVKIT_NOTIFICATION_DESTINATIONS`. The ordinary notification webhook can
+be configured separately. Credentials come from the deployment secret manager.
+
+| Key | URL | Credential |
+| --- | --- | --- |
+| `audit_webhook` | Approved signed webhook endpoint | `signing_key` |
+| `audit_otlp` | HTTPS OTLP/HTTP JSON logs endpoint, typically ending in `/v1/logs` | Optional bearer `token` |
+| `audit_splunk` | HTTPS Splunk HEC endpoint ending in `/services/collector/event` | HEC `token` |
+
+OpenTelemetry exports audit logs over OTLP/HTTP JSON. It records rejected
+log records as a terminal failure so a partially accepted batch is not
+replayed automatically. Splunk uses HEC event ingestion with standard token
+authentication and checks the response code. Use a token without indexer
+acknowledgements. HEC acceptance does not establish indexing. Receivers can
+use the stable batch key and event ID to identify duplicate deliveries.
+Exercise a destination in a pilot before connecting it to production. A
+transport change applies to new batches. Existing batches retain the selected
+transport and can be downloaded for manual recovery if delivery fails.
+
+- [OpenTelemetry OTLP specification](https://opentelemetry.io/docs/specs/otlp/)
+- [Splunk HTTP Event Collector setup](https://help.splunk.com/en/splunk-enterprise/get-data-in/collect-http-event-data/set-up-and-use-http-event-collector-in-splunk-web)

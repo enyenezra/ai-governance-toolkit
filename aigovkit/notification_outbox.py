@@ -11,6 +11,7 @@ EVENT_PRIORITIES = {
     "policy.review_reminder": "info",
     "report.generated": "info",
     "learning.reminder": "info",
+    "reassessment.due": "attention",
 }
 PRIORITIES = ("info", "attention", "urgent")
 CHANNELS = ("webhook", "smtp")

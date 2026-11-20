@@ -115,6 +115,8 @@ def authorize_member(request: Request, session: Session) -> Session:
             "/v1/notifications/run",
             "/v1/board-reports/run",
             "/v1/learning/run",
+            "/v1/learning/enrolments/run",
+            "/v1/reassessments/run",
             "/v1/audit-exporter/run",
         }:
             raise HTTPException(
@@ -183,6 +185,12 @@ def authorize_member(request: Request, session: Session) -> Session:
         and not provider_publish
         and not allowed_directory
         and not allowed_training
+        and not (
+            session.role == "publisher"
+            and request.method == "POST"
+            and request.url.path.startswith("/v1/learning/course-drafts/")
+            and request.url.path.endswith("/publish")
+        )
     ):
         raise HTTPException(403, "This role cannot perform that operation.")
     return session

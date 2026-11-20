@@ -20,7 +20,7 @@ def test_reporting_learning_and_audit_export(monkeypatch):
     tenant, other = (f"test-{secrets.token_hex(8)}" for _ in range(2))
     members = [
         {"id": role, "role": role, "key": secrets.token_urlsafe(32)}
-        for role in ("editor", "scheduler", "reader", "reviewer")
+        for role in ("editor", "scheduler", "reader", "reviewer", "publisher")
     ]
     outsider = {**members[0], "key": secrets.token_urlsafe(32)}
     monkeypatch.setenv("AIGOVKIT_DATABASE_URL", dsn)
@@ -49,7 +49,7 @@ def test_reporting_learning_and_audit_export(monkeypatch):
     store = PostgresInventory(dsn, schema_for(tenant))
     store.initialize()
     PostgresInventory(dsn, schema_for(other)).initialize()
-    editor, scheduler, reader, reviewer, outside = [
+    editor, scheduler, reader, reviewer, publisher, outside = [
         TestClient(app, headers={"X-API-Key": member["key"]})
         for member in [*members, outsider]
     ]
@@ -92,6 +92,86 @@ def test_reporting_learning_and_audit_export(monkeypatch):
     assert editor.put(board + "/schedule", json={"enabled": True}).status_code == 200
     assert scheduler.post(board + "/run").json()["created"]
     assert not scheduler.post(board + "/run").json()["created"]
+
+    draft = f"{learning}/course-drafts/local-course"
+    content = {
+        "title": "Local course",
+        "lesson": "Use approved tools",
+        "question": "Which tools?",
+        "choices": ["Approved", "Any"],
+        "correct_choice": 0,
+        "expected_revision": 0,
+    }
+    saved = editor.put(draft, json=content)
+    assert saved.status_code == 200, saved.text
+    assert editor.put(draft, json=content).status_code == 409
+    assert reader.get(learning + "/course-drafts").status_code == 403
+    assert (
+        editor.post(draft + "/publish", json={"expected_revision": 1}).status_code
+        == 403
+    )
+    published = publisher.post(draft + "/publish", json={"expected_revision": 1})
+    assert published.status_code == 200, published.text
+    course_id = published.json()["id"]
+    assert (
+        reader.get(f"{learning}/courses/{course_id}").json()["choices"]
+        == content["choices"]
+    )
+    assert outside.get(f"{learning}/courses/{course_id}").status_code == 404
+    enrolment = editor.put(
+        learning + "/enrolment-rules/team",
+        json={
+            "course_id": course_id,
+            "role": "reader",
+            "refresher_days": 30,
+        },
+    )
+    assert enrolment.status_code == 200, enrolment.text
+    run = learning + "/enrolments/run"
+    first = scheduler.post(run)
+    assert first.json() == {"assigned": 1}, first.text
+    assert scheduler.post(run).json() == {"assigned": 0}
+    assigned = reader.get(learning + "/assignments").json()[0]
+    assert assigned["course_id"] == course_id
+    assert (
+        editor.put(
+            draft, json={**content, "correct_choice": 1, "expected_revision": 1}
+        ).status_code
+        == 200
+    )
+    assert (
+        publisher.post(draft + "/publish", json={"expected_revision": 2}).json()["id"]
+        != course_id
+    )
+    quiz = f"{learning}/assignments/{assigned['id']}/answer"
+    assert reader.post(quiz, json={"choice": 0}).json()["status"] == "completed"
+    assert scheduler.post(run).json() == {"assigned": 0}
+    with store.connect() as conn:
+        conn.execute(
+            """UPDATE foundation_documents SET body=jsonb_set(body,'{completed_at}',
+               to_jsonb((now()-interval '31 days')::text)) WHERE kind='learning_assignment' AND id=%s""",
+            (assigned["id"],),
+        )
+    assert scheduler.post(run).json() == {"assigned": 1}
+    store.put_document(
+        "register_risk",
+        "due-risk",
+        {
+            "title": "Pilot risk",
+            "treatment_owner": "editor",
+            "due_date": today,
+            "status": "open",
+            "residual_score": 16,
+        },
+    )
+    assert scheduler.post("/v1/reassessments/run").json() == {"created": 1}
+    assert scheduler.post("/v1/reassessments/run").json() == {"created": 0}
+    assert editor.get("/v1/reassessments").json()[0]["title"] == "Pilot risk"
+    assert reader.get("/v1/reassessments").status_code == 403
+    assert outside.get("/v1/reassessments").json() == []
+    expanded = editor.post(board, json=options).json()
+    assert expanded["metrics"]["high_residual_risks"] == 1
+    assert expanded["evidence_sources"]["risks"] == "observed"
 
     batches = []
 

@@ -96,6 +96,16 @@ def snapshot(store, actor, scope: Scope, report_id: str) -> dict:
                     cursor.execute(
                         """
                     SELECT
+                      count(*) FILTER (WHERE kind='register_risk') AS risk_register_records,
+                      count(*) FILTER (WHERE kind='register_risk' AND body->>'status'<>'closed'
+                                       AND (body->>'residual_score')::int >= 15) AS high_residual_risks,
+                      count(*) FILTER (WHERE kind='access_request') AS access_requests,
+                      count(*) FILTER (WHERE kind='access_request' AND body->>'status'='pending') AS pending_access_requests,
+                      count(*) FILTER (WHERE kind='register_incident') AS incident_records,
+                      count(*) FILTER (WHERE kind='register_incident' AND body->>'severity' IN ('high','critical')
+                                       AND body->>'status'<>'resolved') AS severe_open_incidents,
+                      count(*) FILTER (WHERE kind='register_vendor') AS vendor_records,
+                      count(*) FILTER (WHERE kind='register_control_check') AS control_evidence_records,
                       count(*) FILTER (WHERE kind='register_incident' AND body->>'status' <> 'resolved') AS open_incidents,
                       count(*) FILTER (WHERE kind='guardrail_current' AND body->>'suspended'='false'
                                        AND body->>'revision_id' IS NOT NULL) AS active_gate_rules,
@@ -108,8 +118,13 @@ def snapshot(store, actor, scope: Scope, report_id: str) -> dict:
                 metrics.update(
                     cursor.execute(
                         """
-                    SELECT count(DISTINCT p.draft_id) AS published_policies
-                    FROM policy_publications p
+                    WITH latest AS (
+                        SELECT DISTINCT ON (draft_id) draft_id,version FROM policy_publications
+                        ORDER BY draft_id,version DESC
+                    )
+                    SELECT (SELECT count(*) FROM latest) AS published_policies,
+                           (SELECT count(*) FROM policy_acknowledgements JOIN latest USING (draft_id,version))
+                           AS current_policy_acknowledgements
                     """
                     ).fetchone()
                 )
@@ -118,7 +133,7 @@ def snapshot(store, actor, scope: Scope, report_id: str) -> dict:
             ).fetchone()
             data = {
                 "id": report_id,
-                "version": "1.0.0",
+                "version": "1.1.0",
                 "generated_at": datetime.now(UTC).isoformat(),
                 "organisation": profile["name"] if profile else actor.tenant,
                 "scope": scope.model_dump(),
@@ -129,6 +144,19 @@ def snapshot(store, actor, scope: Scope, report_id: str) -> dict:
                     "organisation_totals": "current_snapshot"
                     if len(metrics) > 2
                     else "excluded_by_scope",
+                },
+                "evidence_sources": {
+                    key: ("observed" if metrics[metric] else "no_records")
+                    for key, metric in {
+                        "risks": "risk_register_records",
+                        "access": "access_requests",
+                        "incidents": "incident_records",
+                        "vendors": "vendor_records",
+                        "controls": "control_evidence_records",
+                        "training": "assigned_training",
+                        "policies": "published_policies",
+                    }.items()
+                    if metric in metrics
                 },
                 "recommended_actions": (
                     ["Assign a risk owner to review high-risk assessments."]
@@ -233,6 +261,10 @@ def export(
         ("Report version", report["version"]),
         ("Assessment coverage", report["coverage"]["assessments"]),
         *report["metrics"].items(),
+        *[
+            (f"{source} evidence", state)
+            for source, state in report.get("evidence_sources", {}).items()
+        ],
         *(
             (f"{row['day']} {row['risk']} risk", row["total"])
             for row in report["trend"]

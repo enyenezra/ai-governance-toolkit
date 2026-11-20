@@ -50,10 +50,20 @@ async function main() {
     await assertAccessible(page);
 
     await page.getByRole("link", { name: "Training courses" }).click();
+    await page.locator("#learning-course-select").selectOption("responsible-use-v1");
     await page.getByLabel("Learner member ID").fill("reader");
     await page.getByLabel("Due date").fill(today);
     await page.getByRole("button", { name: "Assign training" }).click();
     await page.getByText(/reader · Due .* · assigned/).waitFor();
+    const courseDraft = page.locator("#course-editor");
+    await courseDraft.getByLabel("Course ID").fill("browser-course");
+    await courseDraft.getByLabel("Course title").fill("Browser authored course");
+    await courseDraft.getByLabel("Lesson text").fill("Use approved tools.");
+    await courseDraft.getByLabel("Quiz question").fill("Which tools are approved?");
+    await courseDraft.getByLabel("First choice").fill("Approved tools");
+    await courseDraft.getByLabel("Second choice").fill("Any tool");
+    await courseDraft.getByRole("button", { name: "Save course draft" }).click();
+    await page.getByText("Course draft saved.").waitFor();
     await assertAccessible(page);
 
     await page.getByRole("link", { name: "Provider enforcement" }).click();
@@ -80,6 +90,14 @@ async function main() {
 
     await page.getByRole("link", { name: "Connected discovery" }).click();
     await page.getByRole("heading", { name: "Google Workspace" }).waitFor();
+    await assertAccessible(page);
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("heading", { name: "Sign in to AIGovKit" }).waitFor();
+
+    await login(process.env.AIGOVKIT_BROWSER_PUBLISHER);
+    await page.getByRole("link", { name: "Training courses" }).click();
+    await page.getByRole("button", { name: "Publish course" }).click();
+    await page.getByText("Course published.").waitFor();
     await assertAccessible(page);
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.getByRole("heading", { name: "Sign in to AIGovKit" }).waitFor();
