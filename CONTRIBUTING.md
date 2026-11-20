@@ -19,7 +19,22 @@ verify the Compose onboarding flow with synthetic inventory. Explicitly test key
 from a second organisation for changes to shared API or storage code.
 
 The browser smoke suite runs in GitHub Actions against disposable PostgreSQL.
-To run it locally, install the Python development dependencies, run
-`npm ci --prefix tests/browser`, install Chromium with
-`tests/browser/node_modules/.bin/playwright-core install chromium`, and run
-`bash scripts/browser-smoke.sh` with `AIGOVKIT_TEST_DATABASE_URL` set.
+To run it locally, install the Python development dependencies and build the
+React frontend with Node.js 24 and npm. Set `AIGOVKIT_TEST_DATABASE_URL`
+to a disposable PostgreSQL database before running the following commands.
+
+```sh
+npm ci --prefix frontend
+npm run build --prefix frontend
+npm ci --prefix tests/browser
+tests/browser/node_modules/.bin/playwright-core install chromium
+bash scripts/browser-smoke.sh
+```
+
+## Frontend pages
+
+Build all new user-facing pages and views as React components under `frontend/`.
+FastAPI serves the compiled bundles and their minimal HTML entry pages. Keep
+assets same-origin and extend browser checks for changed workflows. The workspace
+controller preserves existing API calls and form handlers while the view
+components move to React. Add new interactions through React components.

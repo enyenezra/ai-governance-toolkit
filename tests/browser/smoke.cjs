@@ -20,8 +20,31 @@ async function main() {
     const apiKey = process.env.AIGOVKIT_BROWSER_EDITOR;
     const readerKey = process.env.AIGOVKIT_BROWSER_READER;
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    await page.goto(base + "/workspace");
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.goto(base);
+    await page.getByRole("heading", { name: "Risk assessment", exact: true }).waitFor();
+    await assertAccessible(page);
+    await page.getByLabel("Likelihood").selectOption("4");
+    await page.getByLabel("Impact").selectOption("5");
+    await page.getByLabel("Uses personal data").check();
+    await page.route("**/assessments", (route) => route.fulfill({ status: 503 }), { times: 1 });
+    await page.getByRole("button", { name: "Assess risk" }).click();
+    await page.getByRole("alert").waitFor();
+    await page.getByRole("button", { name: "Assess risk" }).click();
+    await page.getByText("20 / 25 · high risk").waitFor();
+    await page.getByText("Human review required").waitFor();
+    await assertAccessible(page);
+    await page.getByRole("link", { name: "Governance workspace" }).click();
     await page.getByRole("heading", { name: "Sign in to AIGovKit" }).waitFor();
+    const pageIds = await page.locator("#workspace-root .page").evaluateAll(
+      (sections) => sections.map((section) => section.id).sort(),
+    );
+    const navigationIds = await page.locator("#workspace-root nav a").evaluateAll(
+      (links) => links.map((link) => link.hash.slice(1)).sort(),
+    );
+    assert.deepEqual(pageIds, navigationIds);
+    assert.equal(pageIds.length, 21);
     await assertAccessible(page);
 
     async function login(key) {
@@ -121,6 +144,7 @@ async function main() {
     await page.getByText("No devices observed.").waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
     await assertAccessible(page);
+    assert.deepEqual(pageErrors, []);
     console.log("Browser accessibility and role checks passed.");
   } finally {
     await browser.close();
