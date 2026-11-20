@@ -112,6 +112,7 @@ def authorize_member(request: Request, session: Session) -> Session:
             "/v1/incident-alerts/run",
             "/v1/workspace-discovery/run",
             "/v1/security-detections/run",
+            "/v1/notifications/run",
         }:
             raise HTTPException(
                 403, "Scheduler credentials can only run scheduled jobs."

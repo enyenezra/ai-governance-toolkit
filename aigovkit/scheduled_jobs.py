@@ -22,6 +22,7 @@ def main():
                 "incident-alerts",
                 "workspace-discovery",
                 "security-detections",
+                "notifications",
             ):
                 try:
                     result = client.post(f"{base}/v1/{task}/run")

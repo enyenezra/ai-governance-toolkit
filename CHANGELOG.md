@@ -48,3 +48,8 @@
 - Added connector coverage, latest attempt state, evidence and local disconnect controls.
 - Added repeatable Compose demo, backup and restore guidance, and a pilot checklist.
 - Added browser accessibility and permissions to CI and tested an adapter against the database-backed gate.
+
+## Unreleased notifications
+
+- Added a transactional outbox, in-app notices, SMTP and signed HTTP delivery.
+- Added scheduler dispatch, retry backoff, dead-letter status and attempt history.

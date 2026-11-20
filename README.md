@@ -280,3 +280,6 @@ providers, approved model allowlists and gateway decision evidence.
 
 See [controlled containment](docs/controlled-containment.md) for evidence-backed
 detections, incident intake, independent approval and temporary gate restrictions.
+
+See [queued notifications](docs/queued-notifications.md) for in-app alerts,
+operator-configured SMTP and signed webhooks, retry behaviour, and delivery history.

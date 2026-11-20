@@ -28,6 +28,7 @@
       <a href="#guardrails">Runtime guardrails</a>
       <a href="#providers">Provider enforcement</a>
       <a href="#security">Security findings</a>
+      <a href="#notifications">Notifications</a>
       <a href="#directory" id="directory-link" hidden>Identity directory</a>
       <a href="#audit" id="audit-link" hidden>Audit events</a>
     </nav>
@@ -192,6 +193,22 @@
               </form>
             </section>
           </div>
+        </section>
+        <section id="notifications" class="page" hidden>
+          <h1>Notifications</h1>
+          <section class="card"><h2>Recent notifications</h2><div id="notification-list"></div></section>
+          <section class="card" id="notification-preferences" hidden><h2>Outbound preferences</h2>
+            <p id="notification-destinations"></p>
+            <form id="notification-settings-form">
+              <label class="check"><input name="channels" value="webhook" type="checkbox"> Signed webhook</label>
+              <label class="check"><input name="channels" value="smtp" type="checkbox"> SMTP email</label>
+              <label>Minimum priority <select name="minimum_priority"><option>info</option><option>attention</option><option>urgent</option></select></label>
+              <label>Events (leave unselected for all supported events)
+                <select id="notification-events" name="events" multiple size="6"></select>
+              </label>
+              <button>Save notification preferences</button>
+            </form>
+          </section>
         </section>
         <section id="security" class="page" hidden>
           <h1>Security findings</h1>

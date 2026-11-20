@@ -49,6 +49,12 @@ async function main() {
     await page.getByRole("cell", { name: "Browser fixture provider" }).waitFor();
     await assertAccessible(page);
 
+    await page.getByRole("link", { name: "Notifications", exact: true }).click();
+    await page.getByText("Outbound delivery requires an operator-configured destination.").waitFor();
+    await page.getByRole("button", { name: "Save notification preferences" }).click();
+    await page.getByText("Notification preferences saved.").waitFor();
+    await assertAccessible(page);
+
     await page.getByRole("link", { name: "Security findings" }).click();
     await page.getByRole("button", { name: "Run detections" }).click();
     await page.getByText("0 new findings · 0 new incidents.").waitFor();
