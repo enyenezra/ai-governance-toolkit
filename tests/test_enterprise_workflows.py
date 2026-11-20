@@ -378,3 +378,146 @@ def test_reviewed_discovery_promotion_is_idempotent(tenant):
     assert created.status_code == 201
     assert created.json()["name"] == "Discovered tool"
     assert editor.post(promotion, json={"owner": "security"}).status_code == 409
+
+
+def test_provider_governance_adapter_blocks_models_and_verifies_current_version(tenant):
+    import httpx
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+
+    from aigovkit.model_gate_adapter import ModelEnforcedRoutes
+
+    editor, publisher, gateway = (
+        tenant[key] for key in ("editor", "publisher", "gateway")
+    )
+    registration = {
+        "name": "Synthetic model gateway",
+        "provider_type": "openai_compatible",
+        "endpoint": "https://model.example.invalid",
+        "gateway_member": "gateway",
+        "available_models": ["allowed", "denied"],
+    }
+    assert editor.post("/v1/providers/fixture", json=registration).status_code == 201
+    assert (
+        editor.post(
+            "/v1/providers/copilot",
+            json=registration
+            | {
+                "provider_type": "copilot",
+            },
+        ).status_code
+        == 201
+    )
+    policy = {"expected_version": 0, "allowed_models": ["allowed"]}
+    assert (
+        publisher.post("/v1/provider-deployments/copilot", json=policy).status_code
+        == 409
+    )
+    assert (
+        editor.post("/v1/provider-deployments/fixture", json=policy).status_code == 403
+    )
+    assert (
+        publisher.post("/v1/provider-deployments/fixture", json=policy).status_code
+        == 200
+    )
+    assert {row["id"]: row["status"] for row in editor.get("/v1/providers").json()} == {
+        "fixture": "deployed_unverified",
+        "copilot": "unsupported",
+    }
+    rule = editor.post(
+        "/v1/guardrail-rules", json={"scope": SCENARIO, "decision": "allow"}
+    ).json()
+    assert (
+        publisher.post(
+            "/v1/guardrail-deployments",
+            json={
+                "agent_id": "helper",
+                "revision_id": rule["id"],
+                "operation": "deploy",
+                "expected_version": 0,
+            },
+        ).status_code
+        == 200
+    )
+
+    received = []
+    backend = FastAPI()
+
+    class Input(BaseModel):
+        model: str
+        input: str
+
+    @backend.post("/v1/responses")
+    def execute(body: Input):
+        received.append(body.input)
+        return {"model": body.model}
+
+    def gate(request):
+        metadata = json.loads(request.content)
+        assert set(metadata) == {"model", "scope"}
+        decision = gateway.post(request.url.path, json=metadata)
+        return httpx.Response(decision.status_code, json=decision.json())
+
+    proxy = TestClient(
+        ModelEnforcedRoutes(
+            backend,
+            "https://gate.example.invalid",
+            gateway.headers["X-API-Key"],
+            "fixture",
+            {("POST", "/v1/responses"): SCENARIO},
+            transport=httpx.MockTransport(gate),
+        )
+    )
+    endpoint = "/v1/responses"
+    assert (
+        proxy.post(
+            endpoint, json={"model": "allowed", "input": "private prompt"}
+        ).status_code
+        == 200
+    )
+    assert (
+        proxy.post(
+            endpoint, json={"model": "denied", "input": "blocked prompt"}
+        ).status_code
+        == 403
+    )
+    assert (
+        proxy.post(
+            endpoint,
+            content='{"model":"allowed","model":"denied"}',
+            headers={"Content-Type": "application/json"},
+        ).status_code
+        == 422
+    )
+    assert received == ["private prompt"]
+    assert editor.get("/v1/provider-checks/fixture").status_code == 403
+    checks = publisher.get("/v1/provider-checks/fixture").json()
+    evidence = {
+        "allowed_check" if row["decision"] == "allow" else "denied_check": row["id"]
+        for row in checks
+    }
+    assert "private prompt" not in json.dumps(checks)
+    assert (
+        publisher.post("/v1/provider-verifications/fixture", json=evidence).status_code
+        == 200
+    )
+    assert (
+        next(
+            row for row in editor.get("/v1/providers").json() if row["id"] == "fixture"
+        )["status"]
+        == "verified_gateway_checks"
+    )
+    assert (
+        publisher.post(
+            "/v1/provider-deployments/fixture",
+            json={
+                "expected_version": 1,
+                "rollback_to": 1,
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        publisher.post("/v1/provider-verifications/fixture", json=evidence).status_code
+        == 422
+    )

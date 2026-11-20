@@ -452,6 +452,32 @@ const load = {
     byId("access-queue").replaceChildren(...(requests.length ? requests.map(renderAccessRequest)
       : [node("p", "No access requests yet.")]));
   },
+  async providers() {
+    const rows = await request("/providers");
+    byId("provider-publish").hidden = !session.member_id || session.role !== "publisher";
+    table("provider-coverage", ["Provider", "Status", "Controls supported at gateway", "Version", "Last verified"], rows.map((row) => [
+      row.name, row.status.replaceAll("_", " "), Object.keys(row.capabilities).filter((key) => row.capabilities[key] === "gateway").join(", "),
+      row.deployment?.version, row.verification ? new Date(row.verification.verified_at).toLocaleString() : "—",
+    ]));
+    const evidence = byId("provider-evidence");
+    evidence.replaceChildren();
+    if (session.member_id && ["auditor", "publisher"].includes(session.role) && rows.length) {
+      const label = node("label", "Provider for check evidence");
+      const select = node("select");
+      select.append(new Option("Select provider", ""), ...rows.map((row) => new Option(row.name, row.id)));
+      const results = node("div");
+      results.id = "provider-evidence-table";
+      label.append(select);
+      evidence.append(label, results);
+      select.addEventListener("change", () => runPolicyAction(async () => {
+        if (!select.value) { results.replaceChildren(); return; }
+        const checks = await request("/provider-checks/" + encodeURIComponent(select.value));
+        table(results.id, ["Check ID", "Revision", "Model", "Decision"], checks.map((check) => [
+          check.id, check.version, check.model, check.decision,
+        ]));
+      }));
+    }
+  },
   async guardrails() {
     const [states, rules, checks] = await Promise.all([
       request("/guardrails"), request("/guardrail-rules"), request("/guardrail-verifications"),
@@ -778,3 +804,25 @@ async function loadDevices(offset) {
   byId("device-newer").onclick = () => runPolicyAction(() => loadDevices(Math.max(0, offset - 50)));
   byId("device-older").onclick = () => runPolicyAction(() => loadDevices(offset + 50));
 }
+
+const providerModels = (value) => value.split(",").map((item) => item.trim()).filter(Boolean);
+onSubmit("provider-form", async ({ id, models, gateway_member, account_id, ...fields }) => {
+  await request("/providers/" + encodeURIComponent(id), "POST", {
+    ...fields, gateway_member: gateway_member || null, account_id: account_id || null, available_models: providerModels(models),
+  });
+  await load.providers();
+  showNotice("Provider registered.");
+});
+onSubmit("provider-deploy", async ({ id, expected_version, models, rollback_to }) => {
+  await request("/provider-deployments/" + encodeURIComponent(id), "POST", {
+    expected_version: Number(expected_version), allowed_models: providerModels(models),
+    rollback_to: rollback_to ? Number(rollback_to) : null,
+  });
+  await load.providers();
+  showNotice("Allowlist deployed at the gateway. Verification is pending.");
+});
+onSubmit("provider-verify", async ({ id, ...evidence }) => {
+  await request("/provider-verifications/" + encodeURIComponent(id), "POST", evidence);
+  await load.providers();
+  showNotice("Gateway verification recorded.");
+});

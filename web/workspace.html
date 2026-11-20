@@ -26,6 +26,7 @@
       <a href="#training">Training courses</a>
       <a href="#access">Access requests</a>
       <a href="#guardrails">Runtime guardrails</a>
+      <a href="#providers">Provider enforcement</a>
       <a href="#directory" id="directory-link" hidden>Identity directory</a>
       <a href="#audit" id="audit-link" hidden>Audit events</a>
     </nav>
@@ -190,6 +191,45 @@
               </form>
             </section>
           </div>
+        </section>
+        <section id="providers" class="page" hidden>
+          <h1>Provider enforcement</h1>
+          <section class="card"><h2>Coverage and verification</h2><div id="provider-coverage"></div>
+            <div id="provider-evidence"></div></section>
+          <section class="card" data-write><h2>Register a provider</h2>
+            <form id="provider-form">
+              <label>Provider ID <input name="id" required></label>
+              <label>Name <input name="name" required></label>
+              <label>Type <select name="provider_type">
+                <option value="openai_compatible">OpenAI-compatible gateway</option>
+                <option value="internal">Internal</option><option value="self_hosted">Self-hosted</option>
+                <option value="azure_openai">Azure OpenAI</option><option value="anthropic">Anthropic</option>
+                <option value="gemini">Gemini</option><option value="bedrock">Bedrock</option>
+                <option value="copilot">Copilot</option><option value="mcp">MCP</option>
+              </select></label>
+              <label>HTTPS endpoint <input type="url" name="endpoint" required></label>
+              <label>Gateway member ID <input name="gateway_member"></label>
+              <label>Provider account ID (optional) <input name="account_id"></label>
+              <label>Registered models (comma separated) <input name="models"></label>
+              <button>Register provider</button>
+            </form>
+          </section>
+          <section class="card" id="provider-publish" hidden><h2>Publish an allowlist</h2>
+            <form id="provider-deploy">
+              <label>Provider ID <input name="id" required></label>
+              <label>Expected version <input name="expected_version" type="number" min="0" value="0" required></label>
+              <label>Allowed models (comma separated) <input name="models"></label>
+              <label>Rollback to version (optional) <input name="rollback_to" type="number" min="1"></label>
+              <button>Publish or roll back</button>
+            </form>
+            <h2>Verify gateway decisions</h2>
+            <form id="provider-verify">
+              <label>Provider ID <input name="id" required></label>
+              <label>Allowed check ID <input name="allowed_check" required></label>
+              <label>Denied check ID <input name="denied_check" required></label>
+              <button>Record verification</button>
+            </form>
+          </section>
         </section>
         <section id="guardrails" class="page" hidden>
           <h1>Runtime guardrails</h1>
